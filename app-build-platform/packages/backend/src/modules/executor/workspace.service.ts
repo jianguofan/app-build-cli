@@ -20,39 +20,42 @@ export class WorkspaceService {
     this.repoDir = `${this.baseDir}/repo`;
   }
 
+  private exec = (cmd: string) => this.executorService.localExec(cmd);
+  private fileExists = (p: string) => this.executorService.localFileExists(p);
+  private dirExists = (p: string) => this.executorService.localDirectoryExists(p);
+
   async prepare(task: BuildTask): Promise<string> {
     if (!this.gitRepoUrl) {
       throw new Error('GIT_REPO_URL is not configured');
     }
 
-    const repoExists = await this.executorService.directoryExists(this.repoDir);
+    const repoExists = await this.dirExists(this.repoDir);
 
     if (!repoExists) {
-      // First time: clone the repo
       this.logger.log(`First time setup - cloning repository: ${this.gitRepoUrl}`);
-      await this.executorService.exec(`mkdir -p ${this.baseDir}`);
-      await this.executorService.exec(`git clone ${this.gitRepoUrl} ${this.repoDir}`);
+      await this.exec(`mkdir -p ${this.baseDir}`);
+      await this.exec(`git clone ${this.gitRepoUrl} ${this.repoDir}`);
     }
 
     // Fetch latest changes
     this.logger.log('Fetching latest changes...');
-    await this.executorService.exec(`cd ${this.repoDir} && git fetch --all`);
+    await this.exec(`cd ${this.repoDir} && git fetch --all`);
 
     // Clean all untracked files and changes, then checkout target branch
     this.logger.log(`Checking out branch: ${task.branch}`);
-    await this.executorService.exec(`cd ${this.repoDir} && git checkout -- .`);
-    await this.executorService.exec(`cd ${this.repoDir} && git clean -fdx`);
-    await this.executorService.exec(`cd ${this.repoDir} && git checkout ${task.branch}`);
-    await this.executorService.exec(`cd ${this.repoDir} && git reset --hard origin/${task.branch}`);
+    await this.exec(`cd ${this.repoDir} && git checkout -- .`);
+    await this.exec(`cd ${this.repoDir} && git clean -fdx`);
+    await this.exec(`cd ${this.repoDir} && git checkout ${task.branch}`);
+    await this.exec(`cd ${this.repoDir} && git reset --hard origin/${task.branch}`);
 
     // Restore signing files (key.properties + keystore) from persistent storage
     const signingDir = `${this.baseDir}/signing`;
-    const signingExists = await this.executorService.directoryExists(signingDir);
+    const signingExists = await this.dirExists(signingDir);
     if (signingExists) {
-      await this.executorService.exec(
+      await this.exec(
         `cp ${signingDir}/key.properties ${this.repoDir}/android/key.properties 2>/dev/null || true`,
       );
-      await this.executorService.exec(
+      await this.exec(
         `cp ${signingDir}/signedkey.jks ${this.repoDir}/android/signedkey.jks 2>/dev/null || true`,
       );
       this.logger.log('Restored signing files');
@@ -71,19 +74,19 @@ export class WorkspaceService {
     try {
       if (task.platform === 'ios') {
         const ipaPath = `${workspace}/build/ios/ipa/Snapmaker.ipa`;
-        if (await this.executorService.fileExists(ipaPath)) {
+        if (await this.fileExists(ipaPath)) {
           const destPath = `${this.baseDir}/builds/ios/${task.id}.ipa`;
-          await this.executorService.exec(`mkdir -p ${this.baseDir}/builds/ios`);
-          await this.executorService.exec(`cp ${ipaPath} ${destPath}`);
+          await this.exec(`mkdir -p ${this.baseDir}/builds/ios`);
+          await this.exec(`cp ${ipaPath} ${destPath}`);
           artifacts.ipa = destPath;
           this.logger.log(`Collected iOS artifact: ${destPath}`);
         }
       } else if (task.platform === 'android') {
         const apkPath = `${workspace}/build/app/outputs/flutter-apk/app-${task.flavor}-${task.buildMode}.apk`;
-        if (await this.executorService.fileExists(apkPath)) {
+        if (await this.fileExists(apkPath)) {
           const destPath = `${this.baseDir}/builds/android/${task.id}.apk`;
-          await this.executorService.exec(`mkdir -p ${this.baseDir}/builds/android`);
-          await this.executorService.exec(`cp ${apkPath} ${destPath}`);
+          await this.exec(`mkdir -p ${this.baseDir}/builds/android`);
+          await this.exec(`cp ${apkPath} ${destPath}`);
           artifacts.apk = destPath;
           this.logger.log(`Collected Android artifact: ${destPath}`);
         }
@@ -97,10 +100,9 @@ export class WorkspaceService {
   }
 
   async cleanup(workspace: string): Promise<void> {
-    // Reset working tree but keep the repo for next build
     try {
-      await this.executorService.exec(`cd ${workspace} && git checkout -- .`);
-      await this.executorService.exec(`cd ${workspace} && git clean -fdx`);
+      await this.exec(`cd ${workspace} && git checkout -- .`);
+      await this.exec(`cd ${workspace} && git clean -fdx`);
       this.logger.log('Cleaned up working tree (repo kept for reuse)');
     } catch (error: any) {
       this.logger.warn(`Failed to cleanup workspace: ${error.message}`);
@@ -111,9 +113,9 @@ export class WorkspaceService {
     const logFile = `${this.baseDir}/logs/${taskId}.log`;
 
     try {
-      await this.executorService.exec(`mkdir -p ${this.baseDir}/logs`);
+      await this.exec(`mkdir -p ${this.baseDir}/logs`);
       const logContent = logs.join('\n');
-      await this.executorService.exec(
+      await this.exec(
         `echo "${logContent.replace(/"/g, '\\"')}" > ${logFile}`,
       );
       this.logger.log(`Saved logs to: ${logFile}`);

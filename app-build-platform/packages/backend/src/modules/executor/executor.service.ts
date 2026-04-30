@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NodeSSH } from 'node-ssh';
 import { ConfigService } from '@nestjs/config';
+import { exec as execCb, spawn } from 'child_process';
 
 @Injectable()
 export class ExecutorService {
@@ -39,6 +40,107 @@ export class ExecutorService {
       this.logger.log('SSH connection closed');
     }
   }
+
+  // Local process execution (no SSH overhead)
+
+  async localExec(command: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      execCb(command, { shell: '/bin/zsh', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr || error.message));
+          return;
+        }
+        resolve(stdout.trim());
+      });
+    });
+  }
+
+  async localExecute(options: {
+    workspace: string;
+    script: string;
+    args: string[];
+    onLog: (line: string) => void;
+  }): Promise<{ code: number; stdout: string; stderr: string }> {
+    const { workspace, script, args, onLog } = options;
+
+    const keychainPwd = this.configService.get<string>('KEYCHAIN_PASSWORD') || '';
+    if (keychainPwd) {
+      try {
+        await this.localExec(`security unlock-keychain -p '${keychainPwd}' ~/Library/Keychains/login.keychain-db`);
+      } catch {
+        this.logger.warn('Failed to unlock keychain');
+      }
+    }
+
+    const scriptPath = `${workspace}/${script}`;
+    this.logger.log(`Executing: ${scriptPath} ${args.join(' ')}`);
+
+    return new Promise((resolve, reject) => {
+      const child = spawn(scriptPath, args, {
+        cwd: workspace,
+        shell: '/bin/zsh',
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        const lines = chunk.toString().split('\n');
+        lines.forEach((line) => {
+          if (line.trim()) {
+            stdout += line + '\n';
+            onLog(line);
+          }
+        });
+      });
+
+      child.stderr.on('data', (chunk: Buffer) => {
+        const lines = chunk.toString().split('\n');
+        lines.forEach((line) => {
+          if (line.trim()) {
+            stderr += line + '\n';
+            onLog(`[ERROR] ${line}`);
+          }
+        });
+      });
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          this.logger.log('Command executed successfully');
+          resolve({ code, stdout, stderr });
+        } else {
+          this.logger.error(`Command failed with code ${code}`);
+          reject(new Error(`Build failed with exit code ${code}`));
+        }
+      });
+
+      child.on('error', (error) => {
+        this.logger.error(`Command execution error: ${error.message}`);
+        reject(error);
+      });
+    });
+  }
+
+  async localFileExists(path: string): Promise<boolean> {
+    try {
+      await this.localExec(`test -f ${path}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async localDirectoryExists(path: string): Promise<boolean> {
+    try {
+      await this.localExec(`test -d ${path}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // SSH-based execution (kept for backward compatibility)
 
   async execute(options: {
     workspace: string;

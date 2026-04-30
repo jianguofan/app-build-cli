@@ -25,10 +25,10 @@ const { Title, Text } = Typography;
 
 interface BuildTask {
   id: string;
-  platform: 'ios' | 'android';
-  flavor: 'oversea' | 'cn';
-  env: 'dev' | 'pre' | 'prod';
-  buildMode: 'debug' | 'release';
+  platform: string;
+  flavor: string;
+  env: string;
+  buildMode: string;
   branch: string;
   status: 'pending' | 'running' | 'success' | 'failed';
   createdAt: string;
@@ -40,6 +40,7 @@ interface BuildTask {
     apk?: string;
   };
   error?: string;
+  customParams?: Record<string, string>;
 }
 
 const BuildDetail: React.FC = () => {
@@ -200,6 +201,15 @@ const BuildDetail: React.FC = () => {
             <Descriptions.Item label="耗时">
               {formatDuration(task.duration)}
             </Descriptions.Item>
+            {task.customParams && Object.keys(task.customParams).length > 0 && (
+              <Descriptions.Item label="自定义参数" span={2}>
+                <Space>
+                  {Object.entries(task.customParams).map(([key, value]) => (
+                    <Tag key={key}>{key}: {value}</Tag>
+                  ))}
+                </Space>
+              </Descriptions.Item>
+            )}
           </Descriptions>
 
           {task.artifacts && (task.artifacts.ipa || task.artifacts.apk) && (
@@ -209,13 +219,21 @@ const BuildDetail: React.FC = () => {
                 <Title level={4}>构建产物</Title>
                 <Space>
                   {task.artifacts.ipa && (
-                    <Button icon={<DownloadOutlined />}>
-                      下载 IPA ({task.artifacts.ipa.split('/').pop()})
+                    <Button
+                      icon={<DownloadOutlined />}
+                      type="primary"
+                      href={`/api/builds/${task.id}/download?token=${localStorage.getItem('token')}`}
+                    >
+                      下载 IPA
                     </Button>
                   )}
                   {task.artifacts.apk && (
-                    <Button icon={<DownloadOutlined />}>
-                      下载 APK ({task.artifacts.apk.split('/').pop()})
+                    <Button
+                      icon={<DownloadOutlined />}
+                      type="primary"
+                      href={`/api/builds/${task.id}/download?token=${localStorage.getItem('token')}`}
+                    >
+                      下载 APK
                     </Button>
                   )}
                 </Space>

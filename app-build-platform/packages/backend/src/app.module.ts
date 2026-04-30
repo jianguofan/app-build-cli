@@ -7,6 +7,7 @@ import { PublishModule } from './modules/publish/publish.module';
 import { ExecutorModule } from './modules/executor/executor.module';
 import { HealthModule } from './modules/health/health.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { ConfigModule as AppConfigModule } from './modules/config/config.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { StorageModule } from './modules/storage/storage.module';
     ExecutorModule,
     HealthModule,
     StorageModule,
+    AppConfigModule,
   ],
 })
 export class AppModule {}

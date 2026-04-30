@@ -18,6 +18,12 @@ export class PgyerPublisher extends BasePublisher {
     try {
       await this.validateConfig(config, ['apiKey']);
 
+      if (config.apiKey.startsWith('your_')) {
+        throw new Error(
+          'Pgyer API key not configured. Please set PGYER_API_KEY or PGYER_API_KEY_{ACCOUNT} in .env',
+        );
+      }
+
       this.logger.log(`Uploading to Pgyer: ${artifactPath}`);
 
       // 检查文件是否存在
@@ -29,8 +35,6 @@ export class PgyerPublisher extends BasePublisher {
       const form = new FormData();
       form.append('_api_key', config.apiKey);
       form.append('file', fs.createReadStream(artifactPath));
-      form.append('buildInstallType', '2'); // 公开
-      form.append('buildPassword', ''); // 无密码
 
       // 上传文件
       const response = await axios.post(this.apiUrl, form, {

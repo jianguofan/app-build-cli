@@ -256,6 +256,50 @@ interface BuildTask {
 
 ---
 
+### 1.12 Build Integration Fixes
+**Priority**: P0  
+**Estimated effort**: 4 hours
+
+- [x] Fix build_app.sh parameter passing (use named args: --platform=apk --build_mode=profile etc.)
+- [x] Fix iOS artifact path (build/ios/ipa/Snapmaker.ipa instead of build/ios/Runner.ipa)
+- [x] Fix Android artifact path (build/app/outputs/flutter-apk/app-{flavor}-{mode}.apk)
+- [x] Add profile build mode support to DTO and frontend
+- [x] Add pgyerAccountType parameter support (DTO, model, processor, frontend form)
+- [x] Change to shared repo strategy (avoid full clone per build, use git fetch + checkout)
+- [x] Auto-restore signing files (key.properties + signedkey.jks) from persistent storage
+- [x] Add Keychain unlock for iOS codesign via KEYCHAIN_PASSWORD env var
+- [x] Source user shell profile in SSH commands for pub.dev mirror support
+
+**Acceptance criteria**:
+- Android profile build succeeds end-to-end (tested: 131s, 135MB APK)
+- iOS debug build succeeds end-to-end (tested: 147s, 65MB IPA)
+- Second build reuses cloned repo (no full clone)
+- Build parameters match actual build_app.sh interface
+
+---
+
+### 1.13 Frontend Enhancement & Download Support
+**Priority**: P0  
+**Estimated effort**: 6 hours
+
+- [x] Add artifact download API endpoint (GET /api/builds/:id/download)
+- [x] Support JWT auth via query param for browser downloads
+- [x] Wire up download buttons in BuildDetail page
+- [x] Create Publishes management page (/publishes) with table, filters, pagination
+- [x] Create Settings page (/settings) with system config, publishing platform status, env vars
+- [x] Add backend config API (GET /api/config, GET /api/config/env)
+- [x] Build Dashboard page with stats cards (total builds, success rate, running, avg duration) and recent builds table
+- [x] Add backend stats API (GET /api/builds/stats, GET /api/builds/recent)
+- [x] Fix unused import in BuildTasks page
+
+**Acceptance criteria**:
+- All 4 sidebar pages render with real content (Dashboard, Builds, Publishes, Settings)
+- APK/IPA files downloadable from browser
+- Dashboard shows build statistics
+- Settings shows configuration status with masked secrets
+
+---
+
 ## Phase 2: Database Integration & Advanced Features
 
 **Goal**: Replace in-memory storage with PostgreSQL, add user management, analytics, and advanced features.

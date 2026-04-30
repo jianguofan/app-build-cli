@@ -30,7 +30,11 @@ export class PublishService {
     private qihuPublisher: QihuPublisher,
   ) {}
 
-  async publish(buildId: string, artifacts: { ipa?: string; apk?: string }): Promise<void> {
+  async publish(
+    buildId: string,
+    artifacts: { ipa?: string; apk?: string },
+    pgyerAccountType?: string,
+  ): Promise<void> {
     this.logger.log(`Starting publish for build: ${buildId}`);
 
     const build = this.storageService.getBuild(buildId);
@@ -41,7 +45,7 @@ export class PublishService {
     // iOS 发布
     if (build.platform === 'ios' && artifacts.ipa) {
       // 发布到蒲公英
-      await this.createPublishTask(buildId, 'pgyer', artifacts.ipa);
+      await this.createPublishTask(buildId, 'pgyer', artifacts.ipa, pgyerAccountType);
 
       // 发布到 App Store（仅生产环境）
       if (build.env === 'prod') {
@@ -52,7 +56,7 @@ export class PublishService {
     // Android 发布
     if (build.platform === 'android' && artifacts.apk) {
       // 发布到蒲公英
-      await this.createPublishTask(buildId, 'pgyer', artifacts.apk);
+      await this.createPublishTask(buildId, 'pgyer', artifacts.apk, pgyerAccountType);
 
       // 发布到主流应用商店（仅生产环境）
       if (build.env === 'prod') {
@@ -71,6 +75,7 @@ export class PublishService {
     buildId: string,
     platform: string,
     artifactPath: string,
+    pgyerAccountType?: string,
   ): Promise<void> {
     const record: PublishRecord = {
       id: uuidv4(),
@@ -90,6 +95,7 @@ export class PublishService {
         buildId,
         platform,
         artifactPath,
+        pgyerAccountType,
       },
       {
         jobId: record.id,

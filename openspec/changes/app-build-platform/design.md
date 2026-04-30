@@ -466,8 +466,40 @@ Response:
 }
 
 # 下载构建产物
-GET /builds/:id/artifacts/:type
-# type: ipa | apk
+GET /builds/:id/download
+# 支持 ?token=xxx query param 认证（浏览器直接下载）
+
+# 获取构建统计
+GET /builds/stats
+
+Response:
+{
+  "totalBuilds": 156,
+  "successRate": 94.2,
+  "runningBuilds": 3,
+  "avgDuration": 1080
+}
+
+# 获取最近构建
+GET /builds/recent
+```
+
+#### 配置 API
+
+```
+# 获取系统配置概览
+GET /config
+
+Response:
+{
+  "git": { "repoUrl": "git@github.com:..." },
+  "workspace": { "dir": "/Users/.../workspace" },
+  "ssh": { "user": "jgfan" },
+  "publishing": { "pgyer": true, "appstore": false, ... }
+}
+
+# 获取环境变量配置列表（密钥脱敏）
+GET /config/env
 ```
 
 #### 发布 API
@@ -564,11 +596,12 @@ interface BuildTask {
   id: string;                    // UUID
   platform: 'ios' | 'android';
   flavor: 'oversea' | 'cn';
-  buildMode: 'debug' | 'release';
+  buildMode: 'debug' | 'profile' | 'release';
   env: 'dev' | 'pre' | 'prod';
   branch: string;
   language?: string;
   region?: string;
+  pgyerAccountType?: string;
   status: 'pending' | 'running' | 'success' | 'failed';
   createdAt: Date;
   startedAt?: Date;

@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Form,
   Select,
-  Input,
   Button,
   Card,
   Typography,
   Space,
   message,
   Divider,
+  Spin,
 } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import api from '@/services/api';
@@ -17,22 +17,57 @@ import api from '@/services/api';
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-interface BuildFormValues {
-  platform: 'ios' | 'android';
-  flavor: 'oversea' | 'cn';
-  env: 'dev' | 'pre' | 'prod';
-  buildMode: 'debug' | 'release';
-  branch: string;
-  language?: string;
-  region?: string;
+interface BuildOptionValue {
+  value: string;
+  label: string;
 }
+
+interface BuildOptionGroup {
+  id: string;
+  key: string;
+  label: string;
+  values: BuildOptionValue[];
+  required: boolean;
+  isStandard: boolean;
+}
+
+const STANDARD_KEYS = ['platform', 'flavor', 'buildMode', 'env', 'language', 'region', 'pgyerAccountType'];
+
+// Region → default language mapping
+const REGION_LANG_MAP: Record<string, string> = {
+  CN: 'zh',
+  US: 'en',
+};
 
 const NewBuild: React.FC = () => {
   const [form] = Form.useForm();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [optionGroups, setOptionGroups] = useState<BuildOptionGroup[]>([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [branchesLoading] = useState(false);
 
-  const onFinish = async (values: BuildFormValues) => {
+  useEffect(() => {
+    fetchOptions();
+  }, []);
+
+  const fetchOptions = async () => {
+    try {
+      const [optionsRes, branchesRes] = await Promise.all([
+        api.get('/config/option-groups'),
+        api.get('/config/branches'),
+      ]);
+      setOptionGroups(optionsRes.data);
+      setBranches(branchesRes.data);
+    } catch {
+      message.error('获取配置选项失败');
+    } finally {
+      setOptionsLoading(false);
+    }
+  };
+
+  const onFinish = async (values: any) => {
     setLoading(true);
     try {
       const response = await api.post('/builds', values);
@@ -45,6 +80,22 @@ const NewBuild: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // When region changes, auto-set language if not already manually set
+  const handleRegionChange = (regionValue: string) => {
+    const defaultLang = REGION_LANG_MAP[regionValue];
+    if (defaultLang) {
+      form.setFieldValue('language', defaultLang);
+    }
+  };
+
+  const standardGroups = optionGroups.filter((g) => STANDARD_KEYS.includes(g.key));
+  const customGroups = optionGroups.filter((g) => !STANDARD_KEYS.includes(g.key));
+  const getGroup = (key: string) => standardGroups.find((g) => g.key === key);
+
+  if (optionsLoading) {
+    return <div style={{ textAlign: 'center', padding: 50 }}><Spin size="large" /></div>;
+  }
 
   return (
     <div>
@@ -73,82 +124,152 @@ const NewBuild: React.FC = () => {
             form={form}
             layout="vertical"
             onFinish={onFinish}
-            initialValues={{
-              branch: 'main',
-              language: 'zh',
-              region: 'CN',
-            }}
+            initialValues={{ branch: 'main', region: 'CN', language: 'zh' }}
             style={{ maxWidth: 600 }}
           >
-            <Form.Item
-              label="平台"
-              name="platform"
-              rules={[{ required: true, message: '请选择平台' }]}
-            >
-              <Select placeholder="选择平台" size="large">
-                <Option value="ios">iOS</Option>
-                <Option value="android">Android</Option>
-              </Select>
-            </Form.Item>
+            {/* Platform */}
+            {(() => {
+              const g = getGroup('platform');
+              return g ? (
+                <Form.Item label={g.label} name="platform" rules={[{ required: true, message: `请选择${g.label}` }]}>
+                  <Select placeholder={`选择${g.label}`} size="large">
+                    {g.values.map((v) => (
+                      <Option key={v.value} value={v.value}>{v.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              ) : null;
+            })()}
 
-            <Form.Item
-              label="渠道"
-              name="flavor"
-              rules={[{ required: true, message: '请选择渠道' }]}
-            >
-              <Select placeholder="选择渠道" size="large">
-                <Option value="oversea">Oversea (海外)</Option>
-                <Option value="cn">CN (国内)</Option>
-              </Select>
-            </Form.Item>
+            {/* Flavor */}
+            {(() => {
+              const g = getGroup('flavor');
+              return g ? (
+                <Form.Item label={g.label} name="flavor" rules={[{ required: true, message: `请选择${g.label}` }]}>
+                  <Select placeholder={`选择${g.label}`} size="large">
+                    {g.values.map((v) => (
+                      <Option key={v.value} value={v.value}>{v.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              ) : null;
+            })()}
 
-            <Form.Item
-              label="环境"
-              name="env"
-              rules={[{ required: true, message: '请选择环境' }]}
-            >
-              <Select placeholder="选择环境" size="large">
-                <Option value="dev">Development (开发)</Option>
-                <Option value="pre">Pre-production (预发布)</Option>
-                <Option value="prod">Production (生产)</Option>
-              </Select>
-            </Form.Item>
+            {/* Env */}
+            {(() => {
+              const g = getGroup('env');
+              return g ? (
+                <Form.Item label={g.label} name="env" rules={[{ required: true, message: `请选择${g.label}` }]}>
+                  <Select placeholder={`选择${g.label}`} size="large">
+                    {g.values.map((v) => (
+                      <Option key={v.value} value={v.value}>{v.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              ) : null;
+            })()}
 
-            <Form.Item
-              label="构建类型"
-              name="buildMode"
-              rules={[{ required: true, message: '请选择构建类型' }]}
-            >
-              <Select placeholder="选择构建类型" size="large">
-                <Option value="debug">Debug</Option>
-                <Option value="release">Release</Option>
-              </Select>
-            </Form.Item>
+            {/* BuildMode */}
+            {(() => {
+              const g = getGroup('buildMode');
+              return g ? (
+                <Form.Item label={g.label} name="buildMode" rules={[{ required: true, message: `请选择${g.label}` }]}>
+                  <Select placeholder={`选择${g.label}`} size="large">
+                    {g.values.map((v) => (
+                      <Option key={v.value} value={v.value}>{v.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              ) : null;
+            })()}
 
+            {/* Branch - fetched from git, searchable */}
             <Form.Item
               label="分支"
               name="branch"
-              rules={[
-                { required: true, message: '请输入分支名称' },
-                { min: 1, message: '分支名称至少 1 个字符' },
-              ]}
+              rules={[{ required: true, message: '请选择或输入分支' }]}
             >
-              <Input placeholder="例如: main, develop, feature/xxx" size="large" />
-            </Form.Item>
-
-            <Form.Item label="语言" name="language">
-              <Select placeholder="选择语言（可选）" size="large" allowClear>
-                <Option value="zh">中文</Option>
-                <Option value="en">English</Option>
+              <Select
+                placeholder="选择或搜索分支"
+                size="large"
+                showSearch
+                loading={branchesLoading}
+                filterOption={(input, option) =>
+                  (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+                }
+              >
+                {branches.map((b) => (
+                  <Option key={b} value={b}>{b}</Option>
+                ))}
               </Select>
             </Form.Item>
 
-            <Form.Item label="地区" name="region">
-              <Select placeholder="选择地区（可选）" size="large" allowClear>
-                <Option value="CN">中国</Option>
-                <Option value="US">美国</Option>
-              </Select>
-            </Form.Item>
+            {/* Region - shown before language */}
+            {(() => {
+              const g = getGroup('region');
+              return g ? (
+                <Form.Item label={g.label} name="region">
+                  <Select placeholder={`选择${g.label}`} size="large" allowClear onChange={handleRegionChange}>
+                    {g.values.map((v) => (
+                      <Option key={v.value} value={v.value}>{v.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              ) : null;
+            })()}
+
+            {/* Language - auto-linked from region */}
+            {(() => {
+              const g = getGroup('language');
+              return g ? (
+                <Form.Item label={g.label} name="language">
+                  <Select placeholder={`选择${g.label}`} size="large" allowClear>
+                    {g.values.map((v) => (
+                      <Option key={v.value} value={v.value}>{v.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              ) : null;
+            })()}
+
+            {/* Pgyer Account */}
+            {(() => {
+              const g = getGroup('pgyerAccountType');
+              return g ? (
+                <Form.Item label={g.label} name="pgyerAccountType">
+                  <Select placeholder={`选择${g.label}（可选）`} size="large" allowClear>
+                    {g.values.map((v) => (
+                      <Option key={v.value} value={v.value}>{v.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              ) : null;
+            })()}
+
+            {/* Custom option groups */}
+            {customGroups.length > 0 && (
+              <>
+                <Divider>自定义参数</Divider>
+                {customGroups.map((group) => (
+                  <Form.Item
+                    key={group.id}
+                    label={`${group.label} (${group.key})`}
+                    name={['customParams', group.key]}
+                    rules={group.required ? [{ required: true, message: `请选择${group.label}` }] : []}
+                  >
+                    <Select
+                      placeholder={`选择${group.label}`}
+                      size="large"
+                      allowClear={!group.required}
+                    >
+                      {group.values.map((v) => (
+                        <Option key={v.value} value={v.value}>{v.label}</Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                ))}
+              </>
+            )}
 
             <Form.Item>
               <Space>

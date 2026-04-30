@@ -10,7 +10,7 @@ import {
   message,
   Popconfirm,
 } from 'antd';
-import { PlusOutlined, ReloadOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, ReloadOutlined, EyeOutlined, DeleteOutlined, RedoOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import api from '@/services/api';
 
@@ -61,6 +61,16 @@ const BuildTasks: React.FC = () => {
   useEffect(() => {
     fetchBuilds();
   }, []);
+
+  const handleRebuild = async (record: BuildTask) => {
+    try {
+      const res = await api.post(`/builds/${record.id}/rebuild`);
+      message.success('重新构建已创建');
+      navigate(`/builds/${res.data.id}`);
+    } catch (err: any) {
+      message.error(err.response?.data?.message || '重新构建失败');
+    }
+  };
 
   const handleDelete = async (id: string) => {
     try {
@@ -156,7 +166,7 @@ const BuildTasks: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 200,
       fixed: 'right',
       render: (_: any, record: BuildTask) => (
         <Space size="small">
@@ -167,6 +177,14 @@ const BuildTasks: React.FC = () => {
             onClick={() => navigate(`/builds/${record.id}`)}
           >
             查看
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<RedoOutlined />}
+            onClick={() => handleRebuild(record)}
+          >
+            重建
           </Button>
           <Popconfirm
             title="确定删除此任务？"

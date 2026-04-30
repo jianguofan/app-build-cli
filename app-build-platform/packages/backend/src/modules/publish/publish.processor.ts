@@ -20,9 +20,10 @@ export class PublishProcessor {
       buildId: string;
       platform: string;
       artifactPath: string;
+      pgyerAccountType?: string;
     }>,
   ) {
-    const { recordId, buildId, platform, artifactPath } = job.data;
+    const { recordId, buildId, platform, artifactPath, pgyerAccountType } = job.data;
 
     this.logger.log(`Processing publish task: ${recordId} for platform: ${platform}`);
 
@@ -34,7 +35,7 @@ export class PublishProcessor {
       const publisher = this.publishService.getPublisher(platform);
 
       // 获取配置
-      const config = this.getPublishConfig(platform);
+      const config = this.getPublishConfig(platform, pgyerAccountType);
 
       // 执行上传
       const result = await publisher.upload(artifactPath, config);
@@ -66,13 +67,13 @@ export class PublishProcessor {
     }
   }
 
-  private getPublishConfig(platform: string): any {
+  private getPublishConfig(platform: string, pgyerAccountType?: string): any {
     // Phase 1: 从环境变量读取配置
     // Phase 2: 从数据库读取加密的配置
     switch (platform) {
       case 'pgyer':
         return {
-          apiKey: this.configService.get<string>('PGYER_API_KEY'),
+          apiKey: this.getPgyerApiKey(pgyerAccountType),
         };
       case 'appstore':
         return {
@@ -118,5 +119,17 @@ export class PublishProcessor {
       default:
         return {};
     }
+  }
+
+  private getPgyerApiKey(accountType?: string): string | undefined {
+    if (accountType) {
+      const key = this.configService.get<string>(
+        `PGYER_API_KEY_${accountType.toUpperCase()}`,
+      );
+      if (key && !key.startsWith('your_')) {
+        return key;
+      }
+    }
+    return this.configService.get<string>('PGYER_API_KEY');
   }
 }

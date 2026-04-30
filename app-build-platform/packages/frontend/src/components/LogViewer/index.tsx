@@ -29,7 +29,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ logs }) => {
 
   return (
     <Card
-      bodyStyle={{ padding: 0 }}
+      styles={{ body: { padding: 0 } }}
       style={{ backgroundColor: '#1e1e1e', borderRadius: '4px' }}
     >
       <div
