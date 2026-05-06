@@ -1,0 +1,135 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: Launch via ts-node",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/app-build-platform/packages/backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require", "ts-node/register",
+        "--require", "tsconfig-paths/register"
+      ],
+      "args": ["${workspaceFolder}/app-build-platform/packages/backend/src/main.ts"],
+      "env": {
+        "NODE_ENV": "development",
+        "PORT": "3000",
+        "TS_NODE_PROJECT": "${workspaceFolder}/app-build-platform/packages/backend/tsconfig.json"
+      },
+      "sourceMaps": true,
+      "console": "integratedTerminal",
+      "outFiles": ["${workspaceFolder}/app-build-platform/packages/backend/dist/**/*.js"],
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Backend: Attach to NestJS",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "sourceMaps": true,
+      "restart": true,
+      "outFiles": ["${workspaceFolder}/app-build-platform/packages/backend/dist/**/*.js"],
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/app-build-platform/packages/backend/**",
+        "!**/node_modules/**"
+      ]
+    },
+    {
+      "name": "Frontend: Launch Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/app-build-platform/packages/frontend/src",
+      "sourceMapPathOverrides": {
+        "webpack:///./src/*": "${webRoot}/*",
+        "webpack:///src/*": "${webRoot}/*",
+        "webpack:///*": "*",
+        "webpack:///./~/*": "${workspaceFolder}/node_modules/*"
+      }
+    },
+    {
+      "name": "Frontend: Launch Edge",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/app-build-platform/packages/frontend/src",
+      "sourceMapPathOverrides": {
+        "webpack:///./src/*": "${webRoot}/*",
+        "webpack:///src/*": "${webRoot}/*",
+        "webpack:///*": "*",
+        "webpack:///./~/*": "${workspaceFolder}/node_modules/*"
+      }
+    },
+    {
+      "name": "Jest: Current File",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/app-build-platform/packages/backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require", "ts-node/register",
+        "--require", "tsconfig-paths/register",
+        "${workspaceFolder}/app-build-platform/node_modules/jest/bin/jest.js",
+        "--runInBand",
+        "--config",
+        "${workspaceFolder}/app-build-platform/packages/backend/package.json",
+        "${relativeFile}"
+      ],
+      "env": {
+        "NODE_ENV": "test",
+        "TS_NODE_PROJECT": "${workspaceFolder}/app-build-platform/packages/backend/tsconfig.json"
+      },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Jest: All Tests",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/app-build-platform/packages/backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require", "ts-node/register",
+        "--require", "tsconfig-paths/register",
+        "${workspaceFolder}/app-build-platform/node_modules/jest/bin/jest.js",
+        "--runInBand",
+        "--config",
+        "${workspaceFolder}/app-build-platform/packages/backend/package.json"
+      ],
+      "env": {
+        "NODE_ENV": "test",
+        "TS_NODE_PROJECT": "${workspaceFolder}/app-build-platform/packages/backend/tsconfig.json"
+      },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "⚡ Full Stack (一键启动)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/app-build-platform/packages/backend",
+      "preLaunchTask": "start-frontend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require", "ts-node/register",
+        "--require", "tsconfig-paths/register"
+      ],
+      "args": ["${workspaceFolder}/app-build-platform/packages/backend/src/main.ts"],
+      "env": {
+        "NODE_ENV": "development",
+        "PORT": "3000",
+        "TS_NODE_PROJECT": "${workspaceFolder}/app-build-platform/packages/backend/tsconfig.json"
+      },
+      "sourceMaps": true,
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "pattern": "Application is running on: (https?://[^\\s]+)",
+        "uriFormat": "http://localhost:5173",
+        "action": "openExternally"
+      },
+      "outFiles": ["${workspaceFolder}/app-build-platform/packages/backend/dist/**/*.js"],
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}
