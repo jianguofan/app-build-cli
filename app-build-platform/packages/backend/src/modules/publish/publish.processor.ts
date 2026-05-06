@@ -2,7 +2,19 @@ import { Processor, Process } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import { PublishService } from './publish.service';
-import { ConfigService } from '@nestjs/config';
+import { StorageService } from '../storage/storage.service';
+
+const FASTLANE_PLATFORMS = [
+  'appstore',
+  'xiaomi',
+  'huawei',
+  'oppo',
+  'vivo',
+  'tencent',
+  'qihu360',
+  'honor',
+  'samsung',
+];
 
 @Processor('publish')
 export class PublishProcessor {
@@ -10,7 +22,7 @@ export class PublishProcessor {
 
   constructor(
     private publishService: PublishService,
-    private configService: ConfigService,
+    private storageService: StorageService,
   ) {}
 
   @Process('upload')
@@ -41,14 +53,12 @@ export class PublishProcessor {
       const result = await publisher.upload(artifactPath, config);
 
       if (result.success) {
-        // 上传成功
         await this.publishService.updatePublishStatus(recordId, 'success', {
           downloadUrl: result.downloadUrl,
         });
 
         this.logger.log(`Publish task ${recordId} completed successfully`);
       } else {
-        // 上传失败
         await this.publishService.updatePublishStatus(recordId, 'failed', {
           error: result.error,
         });
@@ -68,68 +78,38 @@ export class PublishProcessor {
   }
 
   private getPublishConfig(platform: string, pgyerAccountType?: string): any {
-    // Phase 1: 从环境变量读取配置
-    // Phase 2: 从数据库读取加密的配置
-    switch (platform) {
-      case 'pgyer':
-        return {
-          apiKey: this.getPgyerApiKey(pgyerAccountType),
-        };
-      case 'appstore':
-        return {
-          issuerId: this.configService.get<string>('APPSTORE_ISSUER_ID'),
-          keyId: this.configService.get<string>('APPSTORE_KEY_ID'),
-          privateKey: this.configService.get<string>('APPSTORE_PRIVATE_KEY'),
-          bundleId: this.configService.get<string>('APPSTORE_BUNDLE_ID'),
-        };
-      case 'xiaomi':
-        return {
-          appId: this.configService.get<string>('XIAOMI_APP_ID'),
-          appKey: this.configService.get<string>('XIAOMI_APP_KEY'),
-          appSecret: this.configService.get<string>('XIAOMI_APP_SECRET'),
-        };
-      case 'huawei':
-        return {
-          clientId: this.configService.get<string>('HUAWEI_CLIENT_ID'),
-          clientSecret: this.configService.get<string>('HUAWEI_CLIENT_SECRET'),
-          appId: this.configService.get<string>('HUAWEI_APP_ID'),
-        };
-      case 'tencent':
-        return {
-          organizationId: this.configService.get<string>('TENCENT_ORGANIZATION_ID'),
-          appKey: this.configService.get<string>('TENCENT_APP_KEY'),
-        };
-      case 'vivo':
-        return {
-          accessKey: this.configService.get<string>('VIVO_ACCESS_KEY'),
-          accessSecret: this.configService.get<string>('VIVO_ACCESS_SECRET'),
-          packageName: this.configService.get<string>('VIVO_PACKAGE_NAME'),
-        };
-      case 'oppo':
-        return {
-          appKey: this.configService.get<string>('OPPO_APP_KEY'),
-          appSecret: this.configService.get<string>('OPPO_APP_SECRET'),
-          packageName: this.configService.get<string>('OPPO_PACKAGE_NAME'),
-        };
-      case 'qihu360':
-        return {
-          accessToken: this.configService.get<string>('QIHU360_ACCESS_TOKEN'),
-          appId: this.configService.get<string>('QIHU360_APP_ID'),
-        };
-      default:
-        return {};
+    if (platform === 'pgyer') {
+      return {
+        apiKey: this.getPgyerApiKey(pgyerAccountType),
+      };
     }
+
+    if (FASTLANE_PLATFORMS.includes(platform)) {
+      // Read credentials from the Settings page (StorageService)
+      const allCreds = this.storageService.listPublishingCredentials();
+      const cred = allCreds.find((c) => c.platform === platform);
+      if (!cred || Object.keys(cred.credentials).length === 0) {
+        throw new Error(`No credentials configured for platform: ${platform}`);
+      }
+      return {
+        targetPlatform: platform,
+        credentials: cred.credentials,
+      };
+    }
+
+    return {};
   }
 
   private getPgyerApiKey(accountType?: string): string | undefined {
+    const { ConfigService } = require('@nestjs/config');
+    // PGYER API keys remain in env vars since Pgyer publisher is unchanged
+    const apiKey = process.env.PGYER_API_KEY;
     if (accountType) {
-      const key = this.configService.get<string>(
-        `PGYER_API_KEY_${accountType.toUpperCase()}`,
-      );
-      if (key && !key.startsWith('your_')) {
-        return key;
+      const accountKey = process.env[`PGYER_API_KEY_${accountType.toUpperCase()}`];
+      if (accountKey && !accountKey.startsWith('your_')) {
+        return accountKey;
       }
     }
-    return this.configService.get<string>('PGYER_API_KEY');
+    return apiKey && !apiKey.startsWith('your_') ? apiKey : undefined;
   }
 }

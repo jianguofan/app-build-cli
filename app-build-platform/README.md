@@ -38,6 +38,7 @@
 - Docker Desktop
 - macOS (用于 iOS 构建)
 - Xcode、Android Studio、Flutter SDK 已安装
+- **Ruby >= 2.7 + Bundler**（用于 Fastlane 发布）
 
 ### 安装依赖
 
@@ -63,6 +64,9 @@ npm run dev:frontend
 ```bash
 # 构建所有包
 npm run build
+
+# 安装 Fastlane 依赖
+cd fastlane && bundle install && cd ..
 
 # 启动 Docker Compose
 docker-compose up -d
@@ -115,15 +119,18 @@ WORKSPACE_DIR=~/app-build-workspace
 
 ### API 凭证配置
 
-在 Web 界面的配置管理页面添加各平台的 API 凭证：
+在 Web 界面的 **系统配置 → 发布平台配置** 页面添加各平台的 API 凭证：
 
-- **蒲公英**: API Key
-- **App Store Connect**: Issuer ID, Key ID, Private Key
-- **小米**: App ID, App Key, App Secret
-- **华为**: Client ID, Client Secret, App ID
-- **腾讯应用宝**: Organization ID, App Key
-- **VIVO**: Access Key, Access Secret
-- **OPPO**: App Key, App Secret
+- **蒲公英 (Pgyer)**: API Key（通过 `.env` 环境变量配置）
+- **App Store Connect**: Apple ID、Bundle ID、Issuer ID、Key ID、Private Key
+- **小米应用商店**: App ID、App Key、App Secret
+- **华为应用市场**: Client ID、Client Secret、App ID
+- **OPPO 软件商店**: App Key、App Secret、Package Name
+- **VIVO 应用商店**: Access Key、Access Secret、Package Name
+- **应用宝**: Organization ID、App Key
+- **360 手机助手**: Access Token、App ID
+
+> 所有厂商商店的上传均通过 **Fastlane** 驱动（`fastlane/Fastfile`）。凭证通过 Web UI 保存后在发布时自动注入 fastlane 命令，无需手动编辑 Fastfile。
 
 ## 开发指南
 

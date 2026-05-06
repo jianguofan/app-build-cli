@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { PublishService } from './publish.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -25,5 +25,13 @@ export class PublishController {
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });
+  }
+
+  @Post('build/:buildId/republish')
+  async republish(
+    @Param('buildId') buildId: string,
+    @Body() body: { platforms: string[] },
+  ) {
+    return this.publishService.republish(buildId, body.platforms);
   }
 }

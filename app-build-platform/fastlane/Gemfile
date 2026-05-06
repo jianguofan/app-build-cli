@@ -1,0 +1,9 @@
+source "https://rubygems.org"
+
+gem "fastlane", "~> 2.220"
+
+# Android store plugins — install only if available
+# 小米: no public plugin, Fastfile uses raw curl
+# 华为: no public plugin, Fastfile uses raw curl (OAuth2 + upload)
+# OPPO/VIVO: no public plugins, Fastfile uses raw curl
+# 应用宝/360: no public plugins, Fastfile uses raw curl

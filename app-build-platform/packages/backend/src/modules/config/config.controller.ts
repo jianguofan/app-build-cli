@@ -22,6 +22,80 @@ import {
   AddOptionValueDto,
 } from './dto/option-group.dto';
 
+const PLATFORM_META: Record<string, { label: string; fields: { key: string; label: string; secret: boolean }[] }> = {
+  appstore: {
+    label: 'App Store Connect',
+    fields: [
+      { key: 'apple_id', label: 'Apple ID', secret: false },
+      { key: 'bundle_id', label: 'Bundle ID', secret: false },
+      { key: 'issuer_id', label: 'Issuer ID', secret: false },
+      { key: 'key_id', label: 'Key ID', secret: false },
+      { key: 'private_key', label: 'Private Key (P8)', secret: true },
+    ],
+  },
+  xiaomi: {
+    label: '小米应用商店',
+    fields: [
+      { key: 'app_id', label: 'App ID', secret: false },
+      { key: 'app_key', label: 'App Key', secret: false },
+      { key: 'app_secret', label: 'App Secret', secret: true },
+    ],
+  },
+  huawei: {
+    label: '华为应用市场',
+    fields: [
+      { key: 'client_id', label: 'Client ID', secret: false },
+      { key: 'client_secret', label: 'Client Secret', secret: true },
+      { key: 'app_id', label: 'App ID', secret: false },
+    ],
+  },
+  oppo: {
+    label: 'OPPO 软件商店',
+    fields: [
+      { key: 'app_key', label: 'App Key', secret: false },
+      { key: 'app_secret', label: 'App Secret', secret: true },
+      { key: 'package_name', label: 'Package Name', secret: false },
+    ],
+  },
+  vivo: {
+    label: 'VIVO 应用商店',
+    fields: [
+      { key: 'access_key', label: 'Access Key', secret: false },
+      { key: 'access_secret', label: 'Access Secret', secret: true },
+      { key: 'package_name', label: 'Package Name', secret: false },
+    ],
+  },
+  tencent: {
+    label: '应用宝',
+    fields: [
+      { key: 'organization_id', label: 'Organization ID', secret: false },
+      { key: 'app_key', label: 'App Key', secret: true },
+    ],
+  },
+  qihu360: {
+    label: '360 手机助手',
+    fields: [
+      { key: 'access_token', label: 'Access Token', secret: true },
+      { key: 'app_id', label: 'App ID', secret: false },
+    ],
+  },
+  honor: {
+    label: '荣耀应用市场',
+    fields: [
+      { key: 'client_id', label: 'Client ID', secret: false },
+      { key: 'client_secret', label: 'Client Secret', secret: true },
+      { key: 'app_id', label: 'App ID', secret: false },
+    ],
+  },
+  samsung: {
+    label: '三星应用商店',
+    fields: [
+      { key: 'access_token', label: 'Access Token', secret: true },
+      { key: 'app_id', label: 'App ID', secret: false },
+    ],
+  },
+};
+
 @Controller('config')
 @UseGuards(JwtAuthGuard)
 export class ConfigController {
@@ -31,7 +105,7 @@ export class ConfigController {
     private executorService: ExecutorService,
   ) {}
 
-  // ==================== System Config ====================
+  // ==================== Branches ====================
 
   @Get('branches')
   async getBranches() {
@@ -56,8 +130,11 @@ export class ConfigController {
     }
   }
 
+  // ==================== System Config ====================
+
   @Get()
   getConfig() {
+    // PGYER status — still from env vars
     const pgyerKeys = [
       'PGYER_API_KEY',
       'PGYER_API_KEY_JIANGUO',
@@ -70,20 +147,18 @@ export class ConfigController {
       (k) => this.configService.get(k) && !this.configService.get(k).startsWith('your_'),
     );
 
+    // Fastlane platforms — from credential storage
+    const publishing: Record<string, boolean> = { pgyer: pgyerConfigured };
+    for (const platform of Object.keys(PLATFORM_META)) {
+      const cred = this.storageService.getPublishingCredential(platform);
+      publishing[platform] = !!(cred && cred.enabled && Object.keys(cred.credentials).length > 0);
+    }
+
     return {
       git: { repoUrl: this.configService.get('GIT_REPO_URL') || '' },
       workspace: { dir: this.configService.get('WORKSPACE_DIR') || '' },
       ssh: { user: this.configService.get('SSH_USER') || '' },
-      publishing: {
-        pgyer: pgyerConfigured,
-        appstore: !!(this.configService.get('APPSTORE_ISSUER_ID') && this.configService.get('APPSTORE_ISSUER_ID') !== 'your_issuer_id'),
-        xiaomi: !!(this.configService.get('XIAOMI_APP_ID') && this.configService.get('XIAOMI_APP_ID') !== 'your_app_id'),
-        huawei: !!(this.configService.get('HUAWEI_CLIENT_ID') && this.configService.get('HUAWEI_CLIENT_ID') !== 'your_client_id'),
-        tencent: !!(this.configService.get('TENCENT_ORGANIZATION_ID') && this.configService.get('TENCENT_ORGANIZATION_ID') !== 'your_organization_id'),
-        vivo: !!(this.configService.get('VIVO_ACCESS_KEY') && this.configService.get('VIVO_ACCESS_KEY') !== 'your_access_key'),
-        oppo: !!(this.configService.get('OPPO_APP_KEY') && this.configService.get('OPPO_APP_KEY') !== 'your_app_key'),
-        qihu360: !!(this.configService.get('QIHU360_ACCESS_TOKEN') && this.configService.get('QIHU360_ACCESS_TOKEN') !== 'your_access_token'),
-      },
+      publishing,
     };
   }
 
@@ -100,17 +175,32 @@ export class ConfigController {
       { key: 'PGYER_API_KEY_ALLENLI', label: '蒲公英 API Key (allenli)', type: 'publishing', secret: true },
       { key: 'PGYER_API_KEY_ALANWU', label: '蒲公英 API Key (alanwu)', type: 'publishing', secret: true },
       { key: 'PGYER_API_KEY_LB', label: '蒲公英 API Key (lb)', type: 'publishing', secret: true },
-      { key: 'APPSTORE_ISSUER_ID', label: 'App Store Issuer ID', type: 'publishing', secret: false },
-      { key: 'APPSTORE_KEY_ID', label: 'App Store Key ID', type: 'publishing', secret: false },
-      { key: 'XIAOMI_APP_ID', label: '小米 App ID', type: 'publishing', secret: false },
-      { key: 'HUAWEI_CLIENT_ID', label: '华为 Client ID', type: 'publishing', secret: false },
-      { key: 'TENCENT_ORGANIZATION_ID', label: '应用宝 Organization ID', type: 'publishing', secret: false },
-      { key: 'VIVO_ACCESS_KEY', label: 'VIVO Access Key', type: 'publishing', secret: true },
-      { key: 'OPPO_APP_KEY', label: 'OPPO App Key', type: 'publishing', secret: false },
-      { key: 'QIHU360_ACCESS_TOKEN', label: '360 Access Token', type: 'publishing', secret: true },
     ];
 
+    // Add fastlane platform credentials from storage
+    for (const [platform, meta] of Object.entries(PLATFORM_META)) {
+      const cred = this.storageService.getPublishingCredential(platform);
+      for (const field of meta.fields) {
+        configs.push({
+          key: `PUBLISH_${platform.toUpperCase()}_${field.key.toUpperCase()}`,
+          label: `${meta.label} - ${field.label}`,
+          type: 'publishing',
+          secret: field.secret,
+        });
+      }
+    }
+
     return configs.map((c) => {
+      // For fastlane platform credentials, check storage
+      if (c.key.startsWith('PUBLISH_')) {
+        const parts = c.key.split('_');
+        const platform = parts[1].toLowerCase();
+        const fieldKey = parts.slice(2).join('_').toLowerCase();
+        const cred = this.storageService.getPublishingCredential(platform);
+        const configured = !!(cred?.credentials[fieldKey]);
+        return { ...c, configured, value: c.secret && configured ? '******' : (cred?.credentials[fieldKey] || '') };
+      }
+
       const value = this.configService.get(c.key) || '';
       const isPlaceholder = value.startsWith('your_') || value === '';
       return {
@@ -119,6 +209,70 @@ export class ConfigController {
         value: c.secret ? (isPlaceholder ? '' : '******') : (isPlaceholder ? '' : value),
       };
     });
+  }
+
+  // ==================== Publishing Credentials ====================
+
+  @Get('publishing')
+  getPublishingConfig() {
+    const result: Record<string, any> = {};
+
+    for (const [platform, meta] of Object.entries(PLATFORM_META)) {
+      const cred = this.storageService.getPublishingCredential(platform);
+      result[platform] = {
+        label: meta.label,
+        platform,
+        enabled: cred?.enabled ?? false,
+        configured: !!(cred && Object.keys(cred.credentials).length > 0),
+        fields: meta.fields.map((f) => ({
+          ...f,
+          value: f.secret && cred?.credentials?.[f.key] ? '******' : (cred?.credentials?.[f.key] || ''),
+          configured: !!cred?.credentials?.[f.key],
+        })),
+      };
+    }
+
+    return result;
+  }
+
+  @Put('publishing/:platform')
+  @HttpCode(HttpStatus.OK)
+  savePublishingCredential(
+    @Param('platform') platform: string,
+    @Body() body: { credentials: Record<string, string> },
+  ) {
+    const meta = PLATFORM_META[platform];
+    if (!meta) throw new NotFoundException(`Unknown platform: ${platform}`);
+
+    const record = this.storageService.savePublishingCredential(platform, body.credentials);
+    return {
+      platform: record.platform,
+      enabled: record.enabled,
+      configured: Object.keys(record.credentials).length > 0,
+    };
+  }
+
+  @Delete('publishing/:platform')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deletePublishingCredential(@Param('platform') platform: string) {
+    const meta = PLATFORM_META[platform];
+    if (!meta) throw new NotFoundException(`Unknown platform: ${platform}`);
+
+    this.storageService.deletePublishingCredential(platform);
+  }
+
+  @Put('publishing/:platform/toggle')
+  @HttpCode(HttpStatus.OK)
+  togglePublishingPlatform(
+    @Param('platform') platform: string,
+    @Body() body: { enabled: boolean },
+  ) {
+    const meta = PLATFORM_META[platform];
+    if (!meta) throw new NotFoundException(`Unknown platform: ${platform}`);
+
+    const record = this.storageService.togglePublishingPlatform(platform, body.enabled);
+    if (!record) throw new NotFoundException(`Platform ${platform} not configured yet`);
+    return { platform: record.platform, enabled: record.enabled };
   }
 
   // ==================== Option Groups ====================

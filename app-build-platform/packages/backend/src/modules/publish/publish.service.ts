@@ -5,13 +5,19 @@ import { v4 as uuidv4 } from 'uuid';
 import { StorageService } from '../storage/storage.service';
 import { PublishRecord } from '../storage/models';
 import { PgyerPublisher } from './publishers/pgyer.publisher';
-import { AppStorePublisher } from './publishers/appstore.publisher';
-import { XiaomiPublisher } from './publishers/xiaomi.publisher';
-import { HuaweiPublisher } from './publishers/huawei.publisher';
-import { TencentPublisher } from './publishers/tencent.publisher';
-import { VivoPublisher } from './publishers/vivo.publisher';
-import { OppoPublisher } from './publishers/oppo.publisher';
-import { QihuPublisher } from './publishers/qihu360.publisher';
+import { FastlanePublisher } from './publishers/fastlane.publisher';
+
+const FASTLANE_PLATFORMS = [
+  'appstore',
+  'xiaomi',
+  'huawei',
+  'oppo',
+  'vivo',
+  'tencent',
+  'qihu360',
+  'honor',
+  'samsung',
+] as const;
 
 @Injectable()
 export class PublishService {
@@ -21,13 +27,7 @@ export class PublishService {
     @InjectQueue('publish') private publishQueue: Queue,
     private storageService: StorageService,
     private pgyerPublisher: PgyerPublisher,
-    private appStorePublisher: AppStorePublisher,
-    private xiaomiPublisher: XiaomiPublisher,
-    private huaweiPublisher: HuaweiPublisher,
-    private tencentPublisher: TencentPublisher,
-    private vivoPublisher: VivoPublisher,
-    private oppoPublisher: OppoPublisher,
-    private qihuPublisher: QihuPublisher,
+    private fastlanePublisher: FastlanePublisher,
   ) {}
 
   async publish(
@@ -42,33 +42,42 @@ export class PublishService {
       throw new NotFoundException(`Build ${buildId} not found`);
     }
 
-    // iOS 发布
-    if (build.platform === 'ios' && artifacts.ipa) {
-      // 发布到蒲公英
-      await this.createPublishTask(buildId, 'pgyer', artifacts.ipa, pgyerAccountType);
-
-      // 发布到 App Store（仅生产环境）
-      if (build.env === 'prod') {
-        await this.createPublishTask(buildId, 'appstore', artifacts.ipa);
-      }
+    const targets = build.publishTargets || [];
+    if (targets.length === 0) {
+      this.logger.log(`No publish targets specified for build ${buildId}, skipping publish`);
+      return;
     }
 
-    // Android 发布
-    if (build.platform === 'android' && artifacts.apk) {
-      // 发布到蒲公英
-      await this.createPublishTask(buildId, 'pgyer', artifacts.apk, pgyerAccountType);
+    const artifactPath = build.platform === 'ios' ? artifacts.ipa : artifacts.apk;
+    if (!artifactPath) {
+      this.logger.warn(`No artifact found for build ${buildId}`);
+      return;
+    }
 
-      // 发布到主流应用商店（仅生产环境）
-      if (build.env === 'prod') {
-        await this.createPublishTask(buildId, 'xiaomi', artifacts.apk);
-        await this.createPublishTask(buildId, 'huawei', artifacts.apk);
-        await this.createPublishTask(buildId, 'tencent', artifacts.apk);
-        await this.createPublishTask(buildId, 'vivo', artifacts.apk);
-        await this.createPublishTask(buildId, 'oppo', artifacts.apk);
-        // 360 可选
-        // await this.createPublishTask(buildId, 'qihu360', artifacts.apk);
+    const enabledPlatforms = this.getEnabledFastlanePlatforms();
+
+    for (const platform of targets) {
+      // Pgyer uses its own publisher, always allowed
+      if (platform === 'pgyer') {
+        await this.createPublishTask(buildId, 'pgyer', artifactPath, pgyerAccountType);
+        continue;
+      }
+
+      // Fastlane platforms: must be enabled AND have credentials
+      if (enabledPlatforms.includes(platform)) {
+        await this.createPublishTask(buildId, platform, artifactPath);
+      } else {
+        this.logger.warn(`Platform ${platform} not enabled or missing credentials, skipping`);
       }
     }
+  }
+
+  private getEnabledFastlanePlatforms(): string[] {
+    const certs = this.storageService.listPublishingCredentials();
+    return FASTLANE_PLATFORMS.filter((p) => {
+      const cred = certs.find((c) => c.platform === p);
+      return cred && cred.enabled && Object.keys(cred.credentials).length > 0;
+    });
   }
 
   private async createPublishTask(
@@ -101,7 +110,7 @@ export class PublishService {
         jobId: record.id,
         removeOnComplete: false,
         removeOnFail: false,
-        attempts: 3, // 失败重试 3 次
+        attempts: 3,
         backoff: {
           type: 'exponential',
           delay: 5000,
@@ -165,21 +174,56 @@ export class PublishService {
       case 'pgyer':
         return this.pgyerPublisher;
       case 'appstore':
-        return this.appStorePublisher;
       case 'xiaomi':
-        return this.xiaomiPublisher;
       case 'huawei':
-        return this.huaweiPublisher;
       case 'tencent':
-        return this.tencentPublisher;
       case 'vivo':
-        return this.vivoPublisher;
       case 'oppo':
-        return this.oppoPublisher;
       case 'qihu360':
-        return this.qihuPublisher;
+      case 'honor':
+      case 'samsung':
+        return this.fastlanePublisher;
       default:
         throw new Error(`Unknown platform: ${platform}`);
+    }
+  }
+
+  async republish(buildId: string, platforms: string[]): Promise<void> {
+    this.logger.log(`Republishing build ${buildId} to platforms: ${platforms.join(', ')}`);
+
+    const build = this.storageService.getBuild(buildId);
+    if (!build) {
+      throw new NotFoundException(`Build ${buildId} not found`);
+    }
+
+    if (build.status !== 'success') {
+      throw new Error(`Build ${buildId} is not successful, cannot republish`);
+    }
+
+    if (!build.artifacts || (!build.artifacts.ipa && !build.artifacts.apk)) {
+      throw new Error(`Build ${buildId} has no artifacts, cannot republish`);
+    }
+
+    const artifactPath = build.platform === 'ios' ? build.artifacts.ipa : build.artifacts.apk;
+    if (!artifactPath) {
+      throw new Error(`No artifact found for build ${buildId}`);
+    }
+
+    const enabledPlatforms = this.getEnabledFastlanePlatforms();
+
+    for (const platform of platforms) {
+      // Pgyer uses its own publisher, always allowed
+      if (platform === 'pgyer') {
+        await this.createPublishTask(buildId, 'pgyer', artifactPath, build.pgyerAccountType);
+        continue;
+      }
+
+      // Fastlane platforms: must be enabled AND have credentials
+      if (enabledPlatforms.includes(platform)) {
+        await this.createPublishTask(buildId, platform, artifactPath);
+      } else {
+        this.logger.warn(`Platform ${platform} not enabled or missing credentials, skipping`);
+      }
     }
   }
 }

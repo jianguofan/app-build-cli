@@ -10,11 +10,14 @@ import {
   Divider,
   Spin,
   message,
+  Modal,
+  Checkbox,
 } from 'antd';
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
   ReloadOutlined,
+  CloudUploadOutlined,
 } from '@ant-design/icons';
 import { io, Socket } from 'socket.io-client';
 import api from '@/services/api';
@@ -41,6 +44,14 @@ interface BuildTask {
   };
   error?: string;
   customParams?: Record<string, string>;
+  publishTargets?: string[];
+}
+
+interface PublishPlatform {
+  id: string;
+  name: string;
+  enabled: boolean;
+  configured: boolean;
 }
 
 const BuildDetail: React.FC = () => {
@@ -49,6 +60,10 @@ const BuildDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [task, setTask] = useState<BuildTask | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [republishModalVisible, setRepublishModalVisible] = useState(false);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [availablePlatforms, setAvailablePlatforms] = useState<PublishPlatform[]>([]);
+  const [republishing, setRepublishing] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -98,10 +113,68 @@ const BuildDetail: React.FC = () => {
       // 获取日志
       const logsResponse = await api.get(`/builds/${id}/logs`);
       setLogs(logsResponse.data);
+
+      // 获取可用的发布平台
+      if (response.data.status === 'success') {
+        await fetchAvailablePlatforms(response.data.platform);
+      }
     } catch (error: any) {
       message.error('获取任务详情失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAvailablePlatforms = async (buildPlatform: string) => {
+    try {
+      const response = await api.get('/config/publishing');
+      const platforms: PublishPlatform[] = response.data
+        .filter((p: any) => {
+          // iOS 只能发布到 App Store 和蒲公英
+          if (buildPlatform === 'ios') {
+            return p.id === 'appstore' || p.id === 'pgyer';
+          }
+          // Android 可以发布到所有非 App Store 的平台
+          return p.id !== 'appstore';
+        })
+        .map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          enabled: p.enabled,
+          configured: p.configured,
+        }));
+      setAvailablePlatforms(platforms);
+    } catch (error) {
+      console.error('Failed to fetch available platforms:', error);
+    }
+  };
+
+  const handleRepublish = () => {
+    setSelectedPlatforms([]);
+    setRepublishModalVisible(true);
+  };
+
+  const handleRepublishConfirm = async () => {
+    if (selectedPlatforms.length === 0) {
+      message.warning('请至少选择一个发布平台');
+      return;
+    }
+
+    setRepublishing(true);
+    try {
+      await api.post(`/publishes/build/${id}/republish`, {
+        platforms: selectedPlatforms,
+      });
+      message.success('重新发布任务已创建');
+      setRepublishModalVisible(false);
+      // 刷新发布状态
+      setTimeout(() => {
+        fetchTaskDetail();
+      }, 1000);
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '重新发布失败');
+    } finally {
+      setRepublishing(false);
     }
   };
 
@@ -236,6 +309,14 @@ const BuildDetail: React.FC = () => {
                       下载 APK
                     </Button>
                   )}
+                  {task.status === 'success' && (
+                    <Button
+                      icon={<CloudUploadOutlined />}
+                      onClick={handleRepublish}
+                    >
+                      重新发布
+                    </Button>
+                  )}
                 </Space>
               </div>
             </>
@@ -261,6 +342,57 @@ const BuildDetail: React.FC = () => {
           </div>
         </Space>
       </Card>
+
+      <Modal
+        title="重新发布"
+        open={republishModalVisible}
+        onOk={handleRepublishConfirm}
+        onCancel={() => setRepublishModalVisible(false)}
+        confirmLoading={republishing}
+        okText="确认发布"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Text>选择要发布的平台：</Text>
+        </div>
+        <Checkbox.Group
+          style={{ width: '100%' }}
+          value={selectedPlatforms}
+          onChange={(values) => setSelectedPlatforms(values as string[])}
+        >
+          <Space direction="vertical" style={{ width: '100%' }}>
+            {availablePlatforms.map((platform) => (
+              <Checkbox
+                key={platform.id}
+                value={platform.id}
+                disabled={!platform.enabled || !platform.configured}
+              >
+                {platform.name}
+                {!platform.configured && (
+                  <Tag color="default" style={{ marginLeft: 8 }}>
+                    未配置
+                  </Tag>
+                )}
+                {platform.configured && !platform.enabled && (
+                  <Tag color="default" style={{ marginLeft: 8 }}>
+                    未启用
+                  </Tag>
+                )}
+                {platform.configured && platform.enabled && (
+                  <Tag color="success" style={{ marginLeft: 8 }}>
+                    已配置
+                  </Tag>
+                )}
+              </Checkbox>
+            ))}
+          </Space>
+        </Checkbox.Group>
+        {availablePlatforms.filter((p) => p.enabled && p.configured).length === 0 && (
+          <Text type="secondary" style={{ marginTop: 16, display: 'block' }}>
+            暂无可用的发布平台，请先在设置页面配置发布凭证
+          </Text>
+        )}
+      </Modal>
     </div>
   );
 };

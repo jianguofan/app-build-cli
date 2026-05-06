@@ -79,10 +79,12 @@ const PublishStatus: React.FC<PublishStatusProps> = ({ buildId }) => {
       appstore: 'App Store',
       xiaomi: '小米应用商店',
       huawei: '华为应用市场',
-      tencent: '应用宝',
-      vivo: 'VIVO 应用商店',
+      honor: '荣耀应用市场',
       oppo: 'OPPO 软件商店',
+      vivo: 'VIVO 应用商店',
+      tencent: '应用宝',
       qihu360: '360 手机助手',
+      samsung: '三星应用商店',
     };
     return names[platform] || platform;
   };

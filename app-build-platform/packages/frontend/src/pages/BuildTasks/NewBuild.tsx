@@ -10,8 +10,10 @@ import {
   message,
   Divider,
   Spin,
+  Checkbox,
+  Tag,
 } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import api from '@/services/api';
 
 const { Title, Text } = Typography;
@@ -31,12 +33,46 @@ interface BuildOptionGroup {
   isStandard: boolean;
 }
 
+interface PlatformField {
+  key: string;
+  label: string;
+  secret: boolean;
+  value: string;
+  configured: boolean;
+}
+
+interface PlatformConfig {
+  label: string;
+  platform: string;
+  enabled: boolean;
+  configured: boolean;
+  fields: PlatformField[];
+}
+
 const STANDARD_KEYS = ['platform', 'flavor', 'buildMode', 'env', 'language', 'region', 'pgyerAccountType'];
 
-// Region → default language mapping
 const REGION_LANG_MAP: Record<string, string> = {
   CN: 'zh',
   US: 'en',
+};
+
+// Platform → available publish targets
+const PLATFORM_PUBLISH_TARGETS: Record<string, { key: string; label: string }[]> = {
+  ios: [
+    { key: 'pgyer', label: '蒲公英' },
+    { key: 'appstore', label: 'App Store Connect' },
+  ],
+  android: [
+    { key: 'pgyer', label: '蒲公英' },
+    { key: 'xiaomi', label: '小米应用商店' },
+    { key: 'huawei', label: '华为应用市场' },
+    { key: 'honor', label: '荣耀应用市场' },
+    { key: 'oppo', label: 'OPPO 软件商店' },
+    { key: 'vivo', label: 'VIVO 应用商店' },
+    { key: 'tencent', label: '应用宝' },
+    { key: 'qihu360', label: '360 手机助手' },
+    { key: 'samsung', label: '三星应用商店' },
+  ],
 };
 
 const NewBuild: React.FC = () => {
@@ -47,6 +83,8 @@ const NewBuild: React.FC = () => {
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [branches, setBranches] = useState<string[]>([]);
   const [branchesLoading] = useState(false);
+  const [platforms, setPlatforms] = useState<Record<string, PlatformConfig>>({});
+  const [selectedPlatform, setSelectedPlatform] = useState<string | undefined>();
 
   useEffect(() => {
     fetchOptions();
@@ -54,12 +92,14 @@ const NewBuild: React.FC = () => {
 
   const fetchOptions = async () => {
     try {
-      const [optionsRes, branchesRes] = await Promise.all([
+      const [optionsRes, branchesRes, publishingRes] = await Promise.all([
         api.get('/config/option-groups'),
         api.get('/config/branches'),
+        api.get('/config/publishing'),
       ]);
       setOptionGroups(optionsRes.data);
       setBranches(branchesRes.data);
+      setPlatforms(publishingRes.data);
     } catch {
       message.error('获取配置选项失败');
     } finally {
@@ -81,7 +121,6 @@ const NewBuild: React.FC = () => {
     }
   };
 
-  // When region changes, auto-set language if not already manually set
   const handleRegionChange = (regionValue: string) => {
     const defaultLang = REGION_LANG_MAP[regionValue];
     if (defaultLang) {
@@ -89,9 +128,17 @@ const NewBuild: React.FC = () => {
     }
   };
 
+  const handlePlatformChange = (value: string) => {
+    setSelectedPlatform(value);
+    // Reset publish targets when platform changes
+    form.setFieldValue('publishTargets', []);
+  };
+
   const standardGroups = optionGroups.filter((g) => STANDARD_KEYS.includes(g.key));
   const customGroups = optionGroups.filter((g) => !STANDARD_KEYS.includes(g.key));
   const getGroup = (key: string) => standardGroups.find((g) => g.key === key);
+
+  const publishTargets = selectedPlatform ? PLATFORM_PUBLISH_TARGETS[selectedPlatform] || [] : [];
 
   if (optionsLoading) {
     return <div style={{ textAlign: 'center', padding: 50 }}><Spin size="large" /></div>;
@@ -124,7 +171,7 @@ const NewBuild: React.FC = () => {
             form={form}
             layout="vertical"
             onFinish={onFinish}
-            initialValues={{ branch: 'main', region: 'CN', language: 'zh' }}
+            initialValues={{ branch: 'main', region: 'CN', language: 'zh', publishTargets: [] }}
             style={{ maxWidth: 600 }}
           >
             {/* Platform */}
@@ -132,7 +179,7 @@ const NewBuild: React.FC = () => {
               const g = getGroup('platform');
               return g ? (
                 <Form.Item label={g.label} name="platform" rules={[{ required: true, message: `请选择${g.label}` }]}>
-                  <Select placeholder={`选择${g.label}`} size="large">
+                  <Select placeholder={`选择${g.label}`} size="large" onChange={handlePlatformChange}>
                     {g.values.map((v) => (
                       <Option key={v.value} value={v.value}>{v.label}</Option>
                     ))}
@@ -183,7 +230,7 @@ const NewBuild: React.FC = () => {
               ) : null;
             })()}
 
-            {/* Branch - fetched from git, searchable */}
+            {/* Branch */}
             <Form.Item
               label="分支"
               name="branch"
@@ -204,7 +251,7 @@ const NewBuild: React.FC = () => {
               </Select>
             </Form.Item>
 
-            {/* Region - shown before language */}
+            {/* Region */}
             {(() => {
               const g = getGroup('region');
               return g ? (
@@ -218,7 +265,7 @@ const NewBuild: React.FC = () => {
               ) : null;
             })()}
 
-            {/* Language - auto-linked from region */}
+            {/* Language */}
             {(() => {
               const g = getGroup('language');
               return g ? (
@@ -268,6 +315,40 @@ const NewBuild: React.FC = () => {
                     </Select>
                   </Form.Item>
                 ))}
+              </>
+            )}
+
+            {/* Publish targets */}
+            {selectedPlatform && publishTargets.length > 0 && (
+              <>
+                <Divider>发布平台</Divider>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                  选择本次构建完成后要发布到哪些平台。仅已配置凭证且已启用的平台可勾选。
+                </Text>
+                <Form.Item name="publishTargets">
+                  <Checkbox.Group style={{ width: '100%' }}>
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                      {publishTargets.map((t) => {
+                        const platCfg = platforms[t.key];
+                        const isConfigured = platCfg?.configured && platCfg?.enabled;
+                        return (
+                          <Checkbox key={t.key} value={t.key} disabled={!isConfigured}>
+                            <Space>
+                              {t.label}
+                              {isConfigured ? (
+                                <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontSize: 11 }}>已配置</Tag>
+                              ) : (
+                                <Tag icon={<CloseCircleOutlined />} color="default" style={{ fontSize: 11 }}>
+                                  {platCfg ? '未配置' : '未启用'}
+                                </Tag>
+                              )}
+                            </Space>
+                          </Checkbox>
+                        );
+                      })}
+                    </Space>
+                  </Checkbox.Group>
+                </Form.Item>
               </>
             )}
 

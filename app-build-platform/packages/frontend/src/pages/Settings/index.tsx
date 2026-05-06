@@ -23,6 +23,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import api from '@/services/api';
+import CredentialCard from '@/components/CredentialCard';
 
 const { Title, Text } = Typography;
 
@@ -53,34 +54,28 @@ interface ConfigItem {
   value: string;
 }
 
-interface PublishStatus {
-  pgyer: boolean;
-  appstore: boolean;
-  xiaomi: boolean;
-  huawei: boolean;
-  tencent: boolean;
-  vivo: boolean;
-  oppo: boolean;
-  qihu360: boolean;
+interface PlatformField {
+  key: string;
+  label: string;
+  secret: boolean;
+  value: string;
+  configured: boolean;
+}
+
+interface PlatformConfig {
+  label: string;
+  platform: string;
+  enabled: boolean;
+  configured: boolean;
+  fields: PlatformField[];
 }
 
 interface SystemConfig {
   git: { repoUrl: string };
   workspace: { dir: string };
   ssh: { user: string };
-  publishing: PublishStatus;
+  publishing: Record<string, boolean>;
 }
-
-const platformNames: Record<string, string> = {
-  pgyer: '蒲公英',
-  appstore: 'App Store',
-  xiaomi: '小米应用商店',
-  huawei: '华为应用市场',
-  tencent: '应用宝',
-  vivo: 'VIVO 应用商店',
-  oppo: 'OPPO 软件商店',
-  qihu360: '360 手机助手',
-};
 
 // ==================== OptionGroupCard ====================
 
@@ -215,6 +210,7 @@ const Settings: React.FC = () => {
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [envList, setEnvList] = useState<ConfigItem[]>([]);
   const [optionGroups, setOptionGroups] = useState<BuildOptionGroup[]>([]);
+  const [platforms, setPlatforms] = useState<Record<string, PlatformConfig>>({});
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createForm] = Form.useForm();
 
@@ -225,14 +221,16 @@ const Settings: React.FC = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [configRes, envRes, optionsRes] = await Promise.all([
+      const [configRes, envRes, optionsRes, publishingRes] = await Promise.all([
         api.get('/config'),
         api.get('/config/env'),
         api.get('/config/option-groups'),
+        api.get('/config/publishing'),
       ]);
       setConfig(configRes.data);
       setEnvList(envRes.data);
       setOptionGroups(optionsRes.data);
+      setPlatforms(publishingRes.data);
     } catch {
       message.error('获取配置信息失败');
     } finally {
@@ -353,25 +351,47 @@ const Settings: React.FC = () => {
         ))}
       </Card>
 
-      {/* 发布平台配置 */}
-      {config && (
-        <Card title="发布平台配置" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-            {Object.entries(config.publishing).map(([key, configured]) => (
-              <Tag
-                key={key}
-                icon={configured ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
-                color={configured ? 'success' : 'default'}
-                style={{ fontSize: 14, padding: '4px 12px' }}
-              >
-                {platformNames[key] || key}
-              </Tag>
-            ))}
-          </div>
-        </Card>
-      )}
+      {/* 发布平台凭证配置 */}
+      <Card title="发布平台配置" style={{ marginBottom: 16 }}>
+        <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+          配置各应用商店的 API 凭证。配置后可在发布时选择上传。密钥信息加密存储。
+        </Text>
 
-      {/* 基本信息与环境变量 */}
+        {/* 蒲公英 — static tag display (unchanged, uses env vars) */}
+        {config && (
+          <Card size="small" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Space>
+                <Text strong>蒲公英 (Pgyer)</Text>
+                <Tag
+                  icon={config.publishing.pgyer ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                  color={config.publishing.pgyer ? 'success' : 'default'}
+                >
+                  {config.publishing.pgyer ? '已配置' : '未配置'}
+                </Tag>
+              </Space>
+            </div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              蒲公英 API Key 通过 .env 环境变量配置（PGYER_API_KEY）
+            </Text>
+          </Card>
+        )}
+
+        {/* Fastlane 管理的厂商 — editable credential cards */}
+        {Object.entries(platforms).map(([key, plat]) => (
+          <CredentialCard
+            key={key}
+            platform={key}
+            label={plat.label}
+            enabled={plat.enabled}
+            configured={plat.configured}
+            fields={plat.fields}
+            onChanged={fetchAll}
+          />
+        ))}
+      </Card>
+
+      {/* 基本信息 */}
       {config && (
         <Card title="基本信息" style={{ marginBottom: 16 }}>
           <Descriptions column={1} bordered size="small">

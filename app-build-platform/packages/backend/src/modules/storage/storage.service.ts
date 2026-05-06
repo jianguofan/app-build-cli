@@ -1,5 +1,5 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { BuildTask, BuildOptionGroup, BuildOptionValue, PublishRecord } from './models';
+import { BuildTask, BuildOptionGroup, BuildOptionValue, PublishRecord, PublishingCredential } from './models';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -8,6 +8,7 @@ export class StorageService {
   private builds: Map<string, BuildTask> = new Map();
   private publishes: Map<string, PublishRecord[]> = new Map();
   private optionGroups: Map<string, BuildOptionGroup> = new Map();
+  private publishingCredentials: Map<string, PublishingCredential> = new Map();
 
   onModuleInit() {
     this.initializeOptionDefaults();
@@ -279,6 +280,60 @@ export class StorageService {
     this.optionGroups.set(groupId, group);
     this.logger.log(`Removed value "${value}" from group "${group.key}"`);
     return group;
+  }
+
+  // ==================== Publishing Credentials ====================
+
+  listPublishingCredentials(): PublishingCredential[] {
+    return Array.from(this.publishingCredentials.values());
+  }
+
+  getPublishingCredential(platform: string): PublishingCredential | undefined {
+    return this.publishingCredentials.get(platform);
+  }
+
+  savePublishingCredential(platform: string, credentials: Record<string, string>): PublishingCredential {
+    const existing = this.publishingCredentials.get(platform);
+    const merged = existing
+      ? { ...existing.credentials }
+      : {};
+
+    // Merge: non-empty values overwrite, empty values keep existing
+    for (const [key, value] of Object.entries(credentials)) {
+      if (value !== undefined && value !== '') {
+        merged[key] = value;
+      }
+    }
+
+    const record: PublishingCredential = {
+      platform,
+      enabled: existing?.enabled ?? true,
+      credentials: merged,
+      updatedAt: new Date(),
+    };
+
+    this.publishingCredentials.set(platform, record);
+    this.logger.log(`Saved publishing credential for platform: ${platform}`);
+    return record;
+  }
+
+  deletePublishingCredential(platform: string): boolean {
+    const deleted = this.publishingCredentials.delete(platform);
+    if (deleted) {
+      this.logger.log(`Deleted publishing credential for platform: ${platform}`);
+    }
+    return deleted;
+  }
+
+  togglePublishingPlatform(platform: string, enabled: boolean): PublishingCredential | undefined {
+    const existing = this.publishingCredentials.get(platform);
+    if (!existing) return undefined;
+
+    existing.enabled = enabled;
+    existing.updatedAt = new Date();
+    this.publishingCredentials.set(platform, existing);
+    this.logger.log(`Toggled platform ${platform} to ${enabled ? 'enabled' : 'disabled'}`);
+    return existing;
   }
 
   // ==================== Statistics ====================

@@ -1,0 +1,256 @@
+default_platform(:ios)
+
+# ==================== iOS ====================
+
+platform :ios do
+  desc "Upload IPA to App Store Connect (deliver)"
+  lane :publish_appstore do |options|
+    artifact_path = options[:artifact_path]
+    apple_id = options[:apple_id]
+    bundle_id = options[:bundle_id]
+
+    unless artifact_path
+      UI.user_error!("artifact_path is required")
+    end
+
+    UI.message("Uploading #{artifact_path} to App Store Connect...")
+
+    deliver(
+      ipa: artifact_path,
+      apple_id: apple_id,
+      app_identifier: bundle_id,
+      skip_metadata: true,
+      skip_screenshots: true,
+      force: true,
+      run_precheck_before_submit: false,
+      automatic_release: false,
+    )
+
+    UI.success("Uploaded to App Store Connect successfully")
+  end
+end
+
+# ==================== Android ====================
+
+platform :android do
+  # --- Xiaomi ---
+  desc "Upload APK to Xiaomi App Store"
+  lane :publish_xiaomi do |options|
+    artifact_path = options[:artifact_path]
+    app_id = options[:app_id]
+    app_key = options[:app_key]
+    app_secret = options[:app_secret]
+
+    unless artifact_path && app_id && app_key && app_secret
+      UI.user_error!("artifact_path, app_id, app_key, app_secret are required")
+    end
+
+    UI.message("Uploading #{artifact_path} to Xiaomi App Store...")
+
+    sh("curl", "-s", "-X", "POST",
+       "https://api.developer.xiaomi.com/devupload",
+       "-F", "appId=#{app_id}",
+       "-F", "timestamp=#{Time.now.to_i * 1000}",
+       "-F", "sign=" + Digest::MD5.hexdigest("appKey=#{app_key}&timestamp=#{Time.now.to_i * 1000}&appSecret=#{app_secret}"),
+       "-F", "apk=@#{artifact_path}",
+       "--connect-timeout", "30",
+       "--max-time", "600")
+  end
+
+  # --- Huawei ---
+  desc "Upload APK to Huawei AppGallery"
+  lane :publish_huawei do |options|
+    artifact_path = options[:artifact_path]
+    client_id = options[:client_id]
+    client_secret = options[:client_secret]
+    app_id = options[:app_id]
+
+    unless artifact_path && client_id && client_secret && app_id
+      UI.user_error!("artifact_path, client_id, client_secret, app_id are required")
+    end
+
+    UI.message("Uploading #{artifact_path} to Huawei AppGallery...")
+
+    # Get access token
+    token_resp = sh("curl", "-s", "-X", "POST",
+                    "https://connect-api.cloud.huawei.com/api/oauth2/v1/token",
+                    "-H", "Content-Type: application/json",
+                    "-d", "{\"grant_type\":\"client_credentials\",\"client_id\":\"#{client_id}\",\"client_secret\":\"#{client_secret}\"}")
+    token = JSON.parse(token_resp)["access_token"]
+
+    # Get upload URL
+    url_resp = sh("curl", "-s", "-X", "GET",
+                  "https://connect-api.cloud.huawei.com/api/publish/v2/upload-url",
+                  "-H", "Authorization: Bearer #{token}",
+                  "-d", "appId=#{app_id}",
+                  "-d", "suffix=apk")
+    upload_url = JSON.parse(url_resp)["uploadUrl"]
+
+    # Upload file
+    sh("curl", "-s", "-X", "PUT",
+       upload_url,
+       "-H", "Content-Type: application/octet-stream",
+       "--data-binary", "@#{artifact_path}",
+       "--max-time", "600")
+
+    UI.success("Uploaded to Huawei AppGallery")
+  end
+
+  # --- OPPO ---
+  desc "Upload APK to OPPO App Store"
+  lane :publish_oppo do |options|
+    artifact_path = options[:artifact_path]
+    app_key = options[:app_key]
+    app_secret = options[:app_secret]
+    package_name = options[:package_name]
+
+    unless artifact_path && app_key && app_secret && package_name
+      UI.user_error!("artifact_path, app_key, app_secret, package_name are required")
+    end
+
+    ts = Time.now.to_i
+    sign = Digest::MD5.hexdigest("appKey=#{app_key}&timestamp=#{ts}&appSecret=#{app_secret}")
+
+    sh("curl", "-s", "-X", "POST",
+       "https://oop-openapi.heytapmobi.com/resource/v1/app/upApk",
+       "-F", "appKey=#{app_key}",
+       "-F", "timestamp=#{ts}",
+       "-F", "sign=#{sign}",
+       "-F", "packageName=#{package_name}",
+       "-F", "apk=@#{artifact_path}",
+       "--connect-timeout", "30",
+       "--max-time", "600")
+  end
+
+  # --- VIVO ---
+  desc "Upload APK to VIVO App Store"
+  lane :publish_vivo do |options|
+    artifact_path = options[:artifact_path]
+    access_key = options[:access_key]
+    access_secret = options[:access_secret]
+    package_name = options[:package_name]
+
+    unless artifact_path && access_key && access_secret && package_name
+      UI.user_error!("artifact_path, access_key, access_secret, package_name are required")
+    end
+
+    ts = (Time.now.to_f * 1000).to_i
+    sign = Digest::MD5.hexdigest("access_key=#{access_key}&timestamp=#{ts}&access_secret=#{access_secret}")
+
+    sh("curl", "-s", "-X", "POST",
+       "https://developer-api.vivo.com.cn/router/rest",
+       "-F", "access_key=#{access_key}",
+       "-F", "timestamp=#{ts}",
+       "-F", "sign=#{sign}",
+       "-F", "method=app.upload.apk",
+       "-F", "package_name=#{package_name}",
+       "-F", "apk=@#{artifact_path}",
+       "--connect-timeout", "30",
+       "--max-time", "600")
+  end
+
+  # --- Tencent 应用宝 ---
+  desc "Upload APK to Tencent MyApp (应用宝)"
+  lane :publish_tencent do |options|
+    artifact_path = options[:artifact_path]
+    organization_id = options[:organization_id]
+    app_key = options[:app_key]
+
+    unless artifact_path && organization_id && app_key
+      UI.user_error!("artifact_path, organization_id, app_key are required")
+    end
+
+    ts = Time.now.to_i
+    sign = Digest::MD5.hexdigest("appKey=#{app_key}&timestamp=#{ts}")
+
+    sh("curl", "-s", "-X", "POST",
+       "https://api.open.qq.com/v3/android/apk",
+       "-F", "organizationId=#{organization_id}",
+       "-F", "timestamp=#{ts}",
+       "-F", "sign=#{sign}",
+       "-F", "apk=@#{artifact_path}",
+       "--connect-timeout", "30",
+       "--max-time", "600")
+  end
+
+  # --- 360 手机助手 ---
+  desc "Upload APK to 360 Mobile Assistant"
+  lane :publish_qihu360 do |options|
+    artifact_path = options[:artifact_path]
+    access_token = options[:access_token]
+    app_id = options[:app_id]
+
+    unless artifact_path && access_token && app_id
+      UI.user_error!("artifact_path, access_token, app_id are required")
+    end
+
+    sh("curl", "-s", "-X", "POST",
+       "https://dev.360.cn/api/upload",
+       "-F", "access_token=#{access_token}",
+       "-F", "app_id=#{app_id}",
+       "-F", "apk=@#{artifact_path}",
+       "--connect-timeout", "30",
+       "--max-time", "600")
+  end
+
+  # --- Honor 荣耀 ---
+  desc "Upload APK to Honor AppGallery (荣耀应用市场)"
+  lane :publish_honor do |options|
+    artifact_path = options[:artifact_path]
+    client_id = options[:client_id]
+    client_secret = options[:client_secret]
+    app_id = options[:app_id]
+
+    unless artifact_path && client_id && client_secret && app_id
+      UI.user_error!("artifact_path, client_id, client_secret, app_id are required")
+    end
+
+    UI.message("Uploading #{artifact_path} to Honor AppGallery...")
+
+    # Get OAuth2 access token (荣耀 API 类似华为)
+    token_resp = sh("curl", "-s", "-X", "POST",
+                    "https://connect-api.cloud.honor.com/api/oauth2/v1/token",
+                    "-H", "Content-Type: application/json",
+                    "-d", "{\"grant_type\":\"client_credentials\",\"client_id\":\"#{client_id}\",\"client_secret\":\"#{client_secret}\"}")
+    token = JSON.parse(token_resp)["access_token"]
+
+    # Get upload URL
+    url_resp = sh("curl", "-s", "-X", "GET",
+                  "https://connect-api.cloud.honor.com/api/publish/v2/upload-url",
+                  "-H", "Authorization: Bearer #{token}",
+                  "-d", "appId=#{app_id}",
+                  "-d", "suffix=apk")
+    upload_url = JSON.parse(url_resp)["uploadUrl"]
+
+    # Upload file
+    sh("curl", "-s", "-X", "PUT",
+       upload_url,
+       "-H", "Content-Type: application/octet-stream",
+       "--data-binary", "@#{artifact_path}",
+       "--max-time", "600")
+
+    UI.success("Uploaded to Honor AppGallery")
+  end
+
+  # --- Samsung 三星 ---
+  desc "Upload APK to Samsung Galaxy Store (三星应用商店)"
+  lane :publish_samsung do |options|
+    artifact_path = options[:artifact_path]
+    access_token = options[:access_token]
+    app_id = options[:app_id]
+
+    unless artifact_path && access_token && app_id
+      UI.user_error!("artifact_path, access_token, app_id are required")
+    end
+
+    UI.message("Uploading #{artifact_path} to Samsung Galaxy Store...")
+
+    sh("curl", "-s", "-X", "POST",
+       "https://seller.samsungapps.com/api/app/upload",
+       "-H", "Authorization: Bearer #{access_token}",
+       "-F", "appId=#{app_id}",
+       "-F", "apk=@#{artifact_path}",
+       "--connect-timeout", "30",
+       "--max-time", "600")
+  end
+end

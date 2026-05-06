@@ -19,6 +19,7 @@
 - **操作系统**: macOS 12.0 或更高版本
 - **Docker Desktop**: 最新版本
 - **Node.js**: 18.0 或更高版本
+- **Ruby**: >= 2.7 + Bundler（Fastlane 运行环境）
 - **Xcode**: 最新版本（iOS 构建）
 - **Android Studio**: 最新版本（Android 构建）
 - **Flutter SDK**: 最新稳定版本
@@ -39,10 +40,16 @@ brew install node@18
 # 安装 Docker Desktop
 # 从 https://www.docker.com/products/docker-desktop 下载并安装
 
+# 安装 Ruby 和 Bundler（用于 Fastlane 发布）
+brew install ruby@3
+gem install bundler
+
 # 验证安装
 node --version  # 应该显示 v18.x.x
 docker --version
 docker-compose --version
+ruby --version
+bundler --version
 ```
 
 ### 2. 配置 SSH
@@ -102,14 +109,9 @@ WORKSPACE_DIR=/Users/your_username/app-build-workspace
 # 蒲公英
 PGYER_API_KEY=your_pgyer_api_key
 
-# App Store Connect
-APPSTORE_ISSUER_ID=your_issuer_id
-APPSTORE_KEY_ID=your_key_id
-APPSTORE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
-APPSTORE_BUNDLE_ID=com.example.app
-
-# Android 应用商店（小米、华为、应用宝、VIVO、OPPO、360）
-# 参考 .env.example 文件
+# App Store Connect 和各 Android 应用商店的 API 凭证
+# 不再在此文件中配置，改为通过 Web 界面管理：
+# 登录系统 → 系统配置 → 发布平台配置 → 点击「配置」填写凭证
 ```
 
 ### 5. 创建工作空间
@@ -122,14 +124,23 @@ mkdir -p ~/app-build-workspace/{projects,builds/{ios,android},logs}
 chmod -R 755 ~/app-build-workspace
 ```
 
-### 6. 安装依赖
+### 6. 安装 Fastlane
+
+```bash
+# 安装 Fastlane 及其依赖
+cd fastlane
+bundle install
+cd ..
+```
+
+### 7. 安装项目依赖
 
 ```bash
 # 安装项目依赖
 npm install
 ```
 
-### 7. 启动服务
+### 8. 启动服务
 
 ```bash
 # 启动 Docker Compose
@@ -142,7 +153,15 @@ docker-compose ps
 docker-compose logs -f
 ```
 
-### 8. 验证部署
+### 9. 配置发布凭证
+
+登录 Web 界面后，进入 **系统配置 → 发布平台配置**，为各应用商店添加 API 凭证：
+- App Store Connect: 需要 Apple ID、Bundle ID、Issuer ID、Key ID、Private Key
+- 小米/华为/OPPO/VIVO/应用宝/360: 按表单字段填写对应平台的 App ID、Key、Secret 等
+
+凭证保存后启用该平台开关，后续生产环境构建完成后将自动发布到已启用的平台。
+
+### 10. 验证部署
 
 ```bash
 # 检查后端健康状态

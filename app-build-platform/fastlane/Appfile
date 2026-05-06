@@ -1,0 +1,10 @@
+# App metadata — fill in with your actual values
+# 这些值仅在 lane 内未传参时用作默认值
+
+# iOS
+apple_id ""
+app_identifier ""
+
+# Android
+json_key_file ""
+package_name ""

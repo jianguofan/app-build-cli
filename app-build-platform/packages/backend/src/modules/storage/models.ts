@@ -9,6 +9,7 @@ export interface BuildTask {
   region?: string;
   pgyerAccountType?: string;
   customParams?: Record<string, string>;
+  publishTargets?: string[];
   status: 'pending' | 'running' | 'success' | 'failed';
   createdAt: Date;
   startedAt?: Date;
@@ -46,4 +47,11 @@ export interface PublishRecord {
   downloadUrl?: string;
   error?: string;
   publishedAt?: Date;
+}
+
+export interface PublishingCredential {
+  platform: string;
+  enabled: boolean;
+  credentials: Record<string, string>;
+  updatedAt: Date;
 }
