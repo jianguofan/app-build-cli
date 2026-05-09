@@ -32,14 +32,15 @@ const DirectUpload: React.FC = () => {
     { value: 'appstore', label: 'App Store (CN)', fileType: '.ipa' },
     { value: 'appstore_over', label: 'App Store (OVER)', fileType: '.ipa' },
     { value: 'pgyer', label: '蒲公英', fileType: '.ipa,.apk' },
-    { value: 'xiaomi', label: '小米应用商店', fileType: '.apk' },
-    { value: 'huawei', label: '华为应用市场', fileType: '.apk' },
-    { value: 'honor', label: '荣耀应用市场', fileType: '.apk' },
-    { value: 'oppo', label: 'OPPO 软件商店', fileType: '.apk' },
-    { value: 'vivo', label: 'VIVO 应用商店', fileType: '.apk' },
-    { value: 'tencent', label: '应用宝', fileType: '.apk' },
-    { value: 'qihu360', label: '360 手机助手', fileType: '.apk' },
-    { value: 'samsung', label: '三星应用商店', fileType: '.apk' },
+    // Android uploads are done manually via web console
+    // { value: 'xiaomi', label: '小米应用商店', fileType: '.apk' },
+    // { value: 'huawei', label: '华为应用市场', fileType: '.apk' },
+    // { value: 'honor', label: '荣耀应用市场', fileType: '.apk' },
+    // { value: 'oppo', label: 'OPPO 软件商店', fileType: '.apk' },
+    // { value: 'vivo', label: 'VIVO 应用商店', fileType: '.apk' },
+    // { value: 'tencent', label: '应用宝', fileType: '.apk' },
+    // { value: 'qihu360', label: '360 手机助手', fileType: '.apk' },
+    // { value: 'samsung', label: '三星应用商店', fileType: '.apk' },
   ];
 
   const selectedPlatformInfo = platforms.find((p) => p.value === selectedPlatform);
@@ -114,10 +115,11 @@ const DirectUpload: React.FC = () => {
         return false;
       }
 
-      if (selectedPlatform !== 'appstore' && selectedPlatform !== 'appstore_over' && selectedPlatform !== 'pgyer' && !isAPK) {
-        message.error('该平台只支持 .apk 文件');
-        return false;
-      }
+      // Android uploads are done manually via web console
+      // if (selectedPlatform !== 'appstore' && selectedPlatform !== 'appstore_over' && selectedPlatform !== 'pgyer' && !isAPK) {
+      //   message.error('该平台只支持 .apk 文件');
+      //   return false;
+      // }
 
       const isLt2G = file.size / 1024 / 1024 / 1024 < 2;
       if (!isLt2G) {

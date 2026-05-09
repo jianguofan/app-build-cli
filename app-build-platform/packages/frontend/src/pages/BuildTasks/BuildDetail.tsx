@@ -137,8 +137,9 @@ const BuildDetail: React.FC = () => {
           if (buildPlatform === 'ios') {
             return p.platform === 'appstore' || p.platform === 'appstore_over' || p.platform === 'pgyer';
           }
-          // Android 可以发布到所有非 App Store（含 OVER）的平台
-          return p.platform !== 'appstore' && p.platform !== 'appstore_over';
+          // Android uploads are done manually via web console
+          // return p.platform !== 'appstore' && p.platform !== 'appstore_over';
+          return false;
         })
         .map((p: any) => ({
           id: p.platform,
@@ -379,7 +380,7 @@ const BuildDetail: React.FC = () => {
                       下载 APK
                     </Button>
                   )}
-                  {task.artifacts && (task.artifacts.ipa || task.artifacts.apk) && (
+                  {task.platform === 'ios' && task.artifacts && (task.artifacts.ipa || task.artifacts.apk) && (
                     <>
                       <Button
                         icon={<CloudUploadOutlined />}
