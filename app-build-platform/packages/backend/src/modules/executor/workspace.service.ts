@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ExecutorService } from './executor.service';
 import { BuildTask } from '../storage/models';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class WorkspaceService {
@@ -23,6 +25,39 @@ export class WorkspaceService {
   private exec = (cmd: string) => this.executorService.localExec(cmd);
   private fileExists = (p: string) => this.executorService.localFileExists(p);
   private dirExists = (p: string) => this.executorService.localDirectoryExists(p);
+
+  /**
+   * Bump CFBundleVersion for iOS builds by updating pubspec.yaml's build number
+   * to the current Unix timestamp, ensuring each upload has a unique version.
+   */
+  async bumpBuildNumber(workspace: string): Promise<string> {
+    const pubspecPath = path.join(workspace, 'pubspec.yaml');
+
+    if (!fs.existsSync(pubspecPath)) {
+      this.logger.warn('pubspec.yaml not found, skipping build number bump');
+      return '0';
+    }
+
+    let content = fs.readFileSync(pubspecPath, 'utf-8');
+    const versionRegex = /^(version:\s*\S+\+)(\S+)$/m;
+    const match = versionRegex.exec(content);
+
+    if (!match) {
+      this.logger.warn('Could not find version line in pubspec.yaml, skipping build number bump');
+      return '0';
+    }
+
+    const newBuildNumber = String(Math.floor(Date.now() / 1000));
+    content = content.replace(versionRegex, `$1${newBuildNumber}`);
+    fs.writeFileSync(pubspecPath, content, 'utf-8');
+    this.logger.log(`Bumped build number to ${newBuildNumber} in pubspec.yaml`);
+
+    // Regenerate Generated.xcconfig so FLUTTER_BUILD_NUMBER picks up the new value
+    await this.exec(`cd ${workspace} && flutter pub get`);
+    this.logger.log('Regenerated Flutter xcconfig with new build number');
+
+    return newBuildNumber;
+  }
 
   async prepare(task: BuildTask): Promise<string> {
     if (!this.gitRepoUrl) {

@@ -45,6 +45,7 @@ export interface PublishRecord {
   platform: string;
   status: 'pending' | 'uploading' | 'success' | 'failed' | 'reviewing';
   downloadUrl?: string;
+  reviewUrl?: string;
   error?: string;
   publishedAt?: Date;
 }

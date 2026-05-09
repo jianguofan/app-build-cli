@@ -13,6 +13,14 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiParam,
+  ApiBody,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StorageService } from '../storage/storage.service';
 import { ExecutorService } from '../executor/executor.service';
@@ -96,6 +104,8 @@ const PLATFORM_META: Record<string, { label: string; fields: { key: string; labe
   },
 };
 
+@ApiTags('config')
+@ApiBearerAuth()
 @Controller('config')
 @UseGuards(JwtAuthGuard)
 export class ConfigController {
@@ -108,11 +118,15 @@ export class ConfigController {
   // ==================== Branches ====================
 
   @Get('branches')
+  @ApiOperation({ summary: '获取 Git 分支列表', description: '从配置的 Git 仓库获取所有远程分支' })
+  @ApiResponse({ status: 200, description: '返回分支名称数组' })
   async getBranches() {
     const workspaceDir = this.configService.get<string>('WORKSPACE_DIR') || '';
     const repoDir = `${workspaceDir}/repo`;
 
     try {
+      // Fetch first to pick up newly pushed branches
+      await this.executorService.localExec(`cd ${repoDir} && git fetch --all`);
       const stdout = await this.executorService.localExec(
         `cd ${repoDir} && git branch -r`,
       );
@@ -133,6 +147,7 @@ export class ConfigController {
   // ==================== System Config ====================
 
   @Get()
+  @ApiOperation({ summary: '获取系统配置', description: '返回 Git、工作空间、SSH 及发布平台配置状态' })
   getConfig() {
     // PGYER status — still from env vars
     const pgyerKeys = [
@@ -163,6 +178,7 @@ export class ConfigController {
   }
 
   @Get('env')
+  @ApiOperation({ summary: '获取环境变量列表', description: '返回所有系统环境变量及其配置状态' })
   getEnvList() {
     const configs = [
       { key: 'GIT_REPO_URL', label: 'Git 仓库地址', type: 'git', secret: false },
@@ -214,6 +230,7 @@ export class ConfigController {
   // ==================== Publishing Credentials ====================
 
   @Get('publishing')
+  @ApiOperation({ summary: '获取发布平台配置', description: '返回所有应用商店的凭证配置状态和字段定义' })
   getPublishingConfig() {
     const result: Record<string, any> = {};
 
@@ -237,6 +254,9 @@ export class ConfigController {
 
   @Put('publishing/:platform')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '保存发布平台凭证', description: '保存或更新指定应用商店的 API 凭证（密钥字段为空时不覆盖原值）' })
+  @ApiParam({ name: 'platform', description: '平台标识', enum: ['appstore', 'xiaomi', 'huawei', 'oppo', 'vivo', 'tencent', 'qihu360', 'honor', 'samsung'] })
+  @ApiBody({ schema: { type: 'object', properties: { credentials: { type: 'object', description: '凭证键值对' } } } })
   savePublishingCredential(
     @Param('platform') platform: string,
     @Body() body: { credentials: Record<string, string> },
@@ -254,6 +274,8 @@ export class ConfigController {
 
   @Delete('publishing/:platform')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: '删除发布平台凭证', description: '清除指定应用商店的所有凭证' })
+  @ApiParam({ name: 'platform', description: '平台标识' })
   deletePublishingCredential(@Param('platform') platform: string) {
     const meta = PLATFORM_META[platform];
     if (!meta) throw new NotFoundException(`Unknown platform: ${platform}`);
@@ -263,6 +285,9 @@ export class ConfigController {
 
   @Put('publishing/:platform/toggle')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '切换发布平台启用状态', description: '启用或禁用指定应用商店的发布功能' })
+  @ApiParam({ name: 'platform', description: '平台标识' })
+  @ApiBody({ schema: { type: 'object', properties: { enabled: { type: 'boolean' } } } })
   togglePublishingPlatform(
     @Param('platform') platform: string,
     @Body() body: { enabled: boolean },
@@ -278,17 +303,23 @@ export class ConfigController {
   // ==================== Option Groups ====================
 
   @Get('option-groups')
+  @ApiOperation({ summary: '获取构建选项组', description: '返回所有可自定义的构建参数选项组' })
   getOptionGroups() {
     return this.storageService.listOptionGroups();
   }
 
   @Post('option-groups')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: '创建选项组', description: '创建新的构建参数选项组' })
+  @ApiBody({ type: CreateOptionGroupDto })
   createOptionGroup(@Body() dto: CreateOptionGroupDto) {
     return this.storageService.createOptionGroup(dto);
   }
 
   @Put('option-groups/:id')
+  @ApiOperation({ summary: '更新选项组', description: '更新指定选项组的名称或选项值列表' })
+  @ApiParam({ name: 'id', description: '选项组 ID' })
+  @ApiBody({ type: UpdateOptionGroupDto })
   updateOptionGroup(@Param('id') id: string, @Body() dto: UpdateOptionGroupDto) {
     const group = this.storageService.updateOptionGroup(id, dto);
     if (!group) throw new NotFoundException(`Option group ${id} not found`);
@@ -297,6 +328,8 @@ export class ConfigController {
 
   @Delete('option-groups/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: '删除选项组', description: '删除指定的构建参数选项组' })
+  @ApiParam({ name: 'id', description: '选项组 ID' })
   deleteOptionGroup(@Param('id') id: string) {
     const deleted = this.storageService.deleteOptionGroup(id);
     if (!deleted) throw new NotFoundException(`Option group ${id} not found`);
@@ -304,6 +337,9 @@ export class ConfigController {
 
   @Post('option-groups/:id/values')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: '添加选项值', description: '为指定选项组添加一个新的可选值' })
+  @ApiParam({ name: 'id', description: '选项组 ID' })
+  @ApiBody({ type: AddOptionValueDto })
   addOptionValue(@Param('id') id: string, @Body() dto: AddOptionValueDto) {
     const group = this.storageService.addOptionValue(id, dto);
     if (!group) throw new NotFoundException(`Option group ${id} not found`);
@@ -312,6 +348,9 @@ export class ConfigController {
 
   @Delete('option-groups/:id/values/:value')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: '删除选项值', description: '从指定选项组中移除一个可选值' })
+  @ApiParam({ name: 'id', description: '选项组 ID' })
+  @ApiParam({ name: 'value', description: '选项值' })
   removeOptionValue(@Param('id') id: string, @Param('value') value: string) {
     const group = this.storageService.removeOptionValue(id, value);
     if (!group) throw new NotFoundException(`Option group ${id} not found`);

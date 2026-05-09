@@ -1,6 +1,9 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { BuildTask, BuildOptionGroup, BuildOptionValue, PublishRecord, PublishingCredential } from './models';
 import { v4 as uuidv4 } from 'uuid';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class StorageService {
@@ -9,9 +12,47 @@ export class StorageService {
   private publishes: Map<string, PublishRecord[]> = new Map();
   private optionGroups: Map<string, BuildOptionGroup> = new Map();
   private publishingCredentials: Map<string, PublishingCredential> = new Map();
+  private credentialsPath: string;
+
+  constructor(private configService: ConfigService) {
+    const workspaceDir = configService.get<string>('WORKSPACE_DIR') || process.cwd();
+    this.credentialsPath = path.join(workspaceDir, 'publishing-credentials.json');
+  }
 
   onModuleInit() {
     this.initializeOptionDefaults();
+    this.loadCredentials();
+  }
+
+  // ==================== Credential persistence ====================
+
+  private loadCredentials(): void {
+    try {
+      if (fs.existsSync(this.credentialsPath)) {
+        const raw = fs.readFileSync(this.credentialsPath, 'utf-8');
+        const list: PublishingCredential[] = JSON.parse(raw);
+        for (const cred of list) {
+          cred.updatedAt = new Date(cred.updatedAt);
+          this.publishingCredentials.set(cred.platform, cred);
+        }
+        this.logger.log(`Loaded ${list.length} publishing credentials from ${this.credentialsPath}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to load publishing credentials: ${err.message}`);
+    }
+  }
+
+  private persistCredentials(): void {
+    try {
+      const dir = path.dirname(this.credentialsPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const list = Array.from(this.publishingCredentials.values());
+      fs.writeFileSync(this.credentialsPath, JSON.stringify(list, null, 2), 'utf-8');
+    } catch (err: any) {
+      this.logger.error(`Failed to persist publishing credentials: ${err.message}`);
+    }
   }
 
   // ==================== Build Tasks ====================
@@ -313,6 +354,7 @@ export class StorageService {
     };
 
     this.publishingCredentials.set(platform, record);
+    this.persistCredentials();
     this.logger.log(`Saved publishing credential for platform: ${platform}`);
     return record;
   }
@@ -320,6 +362,7 @@ export class StorageService {
   deletePublishingCredential(platform: string): boolean {
     const deleted = this.publishingCredentials.delete(platform);
     if (deleted) {
+      this.persistCredentials();
       this.logger.log(`Deleted publishing credential for platform: ${platform}`);
     }
     return deleted;
@@ -332,6 +375,7 @@ export class StorageService {
     existing.enabled = enabled;
     existing.updatedAt = new Date();
     this.publishingCredentials.set(platform, existing);
+    this.persistCredentials();
     this.logger.log(`Toggled platform ${platform} to ${enabled ? 'enabled' : 'disabled'}`);
     return existing;
   }

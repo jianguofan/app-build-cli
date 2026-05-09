@@ -61,9 +61,12 @@ const BuildDetail: React.FC = () => {
   const [task, setTask] = useState<BuildTask | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [republishModalVisible, setRepublishModalVisible] = useState(false);
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [selectedUploadPlatforms, setSelectedUploadPlatforms] = useState<string[]>([]);
   const [availablePlatforms, setAvailablePlatforms] = useState<PublishPlatform[]>([]);
   const [republishing, setRepublishing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -152,6 +155,56 @@ const BuildDetail: React.FC = () => {
   const handleRepublish = () => {
     setSelectedPlatforms([]);
     setRepublishModalVisible(true);
+  };
+
+  const handleDirectUpload = () => {
+    setSelectedUploadPlatforms([]);
+    setUploadModalVisible(true);
+  };
+
+  const handleUploadConfirm = async () => {
+    if (selectedUploadPlatforms.length === 0) {
+      message.warning('请至少选择一个上传平台');
+      return;
+    }
+
+    setUploading(true);
+    const errors: string[] = [];
+
+    try {
+      for (const platform of selectedUploadPlatforms) {
+        try {
+          await api.post(`/publishes/upload/${id}/${platform}`);
+          message.success(`${platform} 上传任务已创建`);
+        } catch (err: any) {
+          const errorMsg = err.response?.data?.message || '上传失败';
+          errors.push(`${platform}: ${errorMsg}`);
+        }
+      }
+
+      if (errors.length === 0) {
+        message.success('所有上传任务已创建');
+        setUploadModalVisible(false);
+      } else {
+        Modal.error({
+          title: '部分上传任务创建失败',
+          content: (
+            <div>
+              {errors.map((err, idx) => (
+                <div key={idx}>{err}</div>
+              ))}
+            </div>
+          ),
+        });
+      }
+
+      // 刷新发布状态
+      setTimeout(() => {
+        fetchTaskDetail();
+      }, 1000);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleRepublishConfirm = async () => {
@@ -309,13 +362,22 @@ const BuildDetail: React.FC = () => {
                       下载 APK
                     </Button>
                   )}
-                  {task.status === 'success' && (
-                    <Button
-                      icon={<CloudUploadOutlined />}
-                      onClick={handleRepublish}
-                    >
-                      重新发布
-                    </Button>
+                  {task.artifacts && (task.artifacts.ipa || task.artifacts.apk) && (
+                    <>
+                      <Button
+                        icon={<CloudUploadOutlined />}
+                        type="primary"
+                        onClick={handleRepublish}
+                      >
+                        重新发布
+                      </Button>
+                      <Button
+                        icon={<CloudUploadOutlined />}
+                        onClick={handleDirectUpload}
+                      >
+                        直接上传（调试）
+                      </Button>
+                    </>
                   )}
                 </Space>
               </div>
@@ -392,6 +454,56 @@ const BuildDetail: React.FC = () => {
             暂无可用的发布平台，请先在设置页面配置发布凭证
           </Text>
         )}
+      </Modal>
+
+      <Modal
+        title="直接上传（调试模式）"
+        open={uploadModalVisible}
+        onOk={handleUploadConfirm}
+        onCancel={() => setUploadModalVisible(false)}
+        confirmLoading={uploading}
+        okText="开始上传"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Text type="warning">
+            ⚠️ 此功能跳过构建状态检查，直接上传产物到指定平台，仅用于调试。
+          </Text>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <Text>选择要上传的平台：</Text>
+        </div>
+        <Checkbox.Group
+          style={{ width: '100%' }}
+          value={selectedUploadPlatforms}
+          onChange={(values) => setSelectedUploadPlatforms(values as string[])}
+        >
+          <Space direction="vertical" style={{ width: '100%' }}>
+            {availablePlatforms.map((platform) => (
+              <Checkbox
+                key={platform.id}
+                value={platform.id}
+              >
+                {platform.name}
+                {!platform.configured && (
+                  <Tag color="warning" style={{ marginLeft: 8 }}>
+                    未配置（仍可尝试）
+                  </Tag>
+                )}
+                {platform.configured && !platform.enabled && (
+                  <Tag color="default" style={{ marginLeft: 8 }}>
+                    未启用
+                  </Tag>
+                )}
+                {platform.configured && platform.enabled && (
+                  <Tag color="success" style={{ marginLeft: 8 }}>
+                    已配置
+                  </Tag>
+                )}
+              </Checkbox>
+            ))}
+          </Space>
+        </Checkbox.Group>
       </Modal>
     </div>
   );

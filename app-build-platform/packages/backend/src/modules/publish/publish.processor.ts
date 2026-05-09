@@ -33,9 +33,10 @@ export class PublishProcessor {
       platform: string;
       artifactPath: string;
       pgyerAccountType?: string;
+      releaseNotes?: string;
     }>,
   ) {
-    const { recordId, buildId, platform, artifactPath, pgyerAccountType } = job.data;
+    const { recordId, buildId, platform, artifactPath, pgyerAccountType, releaseNotes } = job.data;
 
     this.logger.log(`Processing publish task: ${recordId} for platform: ${platform}`);
 
@@ -47,15 +48,26 @@ export class PublishProcessor {
       const publisher = this.publishService.getPublisher(platform);
 
       // 获取配置
-      const config = this.getPublishConfig(platform, pgyerAccountType);
+      const config = this.getPublishConfig(platform, pgyerAccountType, releaseNotes);
 
       // 执行上传
       const result = await publisher.upload(artifactPath, config);
 
       if (result.success) {
-        await this.publishService.updatePublishStatus(recordId, 'success', {
+        const updates: any = {
           downloadUrl: result.downloadUrl,
-        });
+        };
+
+        // For App Store, generate review URL from the apple_id in credentials
+        if (platform === 'appstore') {
+          const appleId = config.credentials?.apple_id;
+          if (appleId) {
+            updates.reviewUrl = `https://appstoreconnect.apple.com/apps/${appleId}/distribution/ios/version/inflight`;
+            this.logger.log(`App Store review URL: ${updates.reviewUrl}`);
+          }
+        }
+
+        await this.publishService.updatePublishStatus(recordId, 'success', updates);
 
         this.logger.log(`Publish task ${recordId} completed successfully`);
       } else {
@@ -77,7 +89,7 @@ export class PublishProcessor {
     }
   }
 
-  private getPublishConfig(platform: string, pgyerAccountType?: string): any {
+  private getPublishConfig(platform: string, pgyerAccountType?: string, releaseNotes?: string): any {
     if (platform === 'pgyer') {
       return {
         apiKey: this.getPgyerApiKey(pgyerAccountType),
@@ -94,6 +106,7 @@ export class PublishProcessor {
       return {
         targetPlatform: platform,
         credentials: cred.credentials,
+        releaseNotes,
       };
     }
 

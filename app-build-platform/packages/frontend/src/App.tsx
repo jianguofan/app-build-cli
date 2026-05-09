@@ -11,6 +11,7 @@ import NewBuild from '@/pages/BuildTasks/NewBuild';
 import BuildDetail from '@/pages/BuildTasks/BuildDetail';
 import Publishes from '@/pages/Publishes';
 import Settings from '@/pages/Settings';
+import DirectUpload from '@/pages/DirectUpload';
 
 const App: React.FC = () => {
   return (
@@ -36,6 +37,7 @@ const App: React.FC = () => {
             <Route path="/builds/new" element={<NewBuild />} />
             <Route path="/builds/:id" element={<BuildDetail />} />
             <Route path="/publishes" element={<Publishes />} />
+            <Route path="/direct-upload" element={<DirectUpload />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Routes>

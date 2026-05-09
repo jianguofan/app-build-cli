@@ -85,7 +85,8 @@ export class PublishService {
     platform: string,
     artifactPath: string,
     pgyerAccountType?: string,
-  ): Promise<void> {
+    releaseNotes?: string,
+  ): Promise<string> {
     const record: PublishRecord = {
       id: uuidv4(),
       buildId,
@@ -105,6 +106,7 @@ export class PublishService {
         platform,
         artifactPath,
         pgyerAccountType,
+        releaseNotes,
       },
       {
         jobId: record.id,
@@ -119,6 +121,7 @@ export class PublishService {
     );
 
     this.logger.log(`Created publish task: ${record.id} for platform: ${platform}`);
+    return record.id;
   }
 
   async getPublishes(buildId: string): Promise<PublishRecord[]> {
@@ -196,10 +199,6 @@ export class PublishService {
       throw new NotFoundException(`Build ${buildId} not found`);
     }
 
-    if (build.status !== 'success') {
-      throw new Error(`Build ${buildId} is not successful, cannot republish`);
-    }
-
     if (!build.artifacts || (!build.artifacts.ipa && !build.artifacts.apk)) {
       throw new Error(`Build ${buildId} has no artifacts, cannot republish`);
     }
@@ -225,5 +224,69 @@ export class PublishService {
         this.logger.warn(`Platform ${platform} not enabled or missing credentials, skipping`);
       }
     }
+  }
+
+  async directUpload(buildId: string, platform: string): Promise<void> {
+    this.logger.log(`Direct upload build ${buildId} to platform: ${platform}`);
+
+    const build = this.storageService.getBuild(buildId);
+    if (!build) {
+      throw new NotFoundException(`Build ${buildId} not found`);
+    }
+
+    if (!build.artifacts || (!build.artifacts.ipa && !build.artifacts.apk)) {
+      throw new Error(`Build ${buildId} has no artifacts, cannot upload`);
+    }
+
+    const artifactPath = build.platform === 'ios' ? build.artifacts.ipa : build.artifacts.apk;
+    if (!artifactPath) {
+      throw new Error(`No artifact found for build ${buildId}`);
+    }
+
+    if (platform === 'pgyer') {
+      await this.createPublishTask(buildId, 'pgyer', artifactPath, build.pgyerAccountType);
+      return;
+    }
+
+    await this.createPublishTask(buildId, platform, artifactPath);
+  }
+
+  async retryPublish(publishId: string): Promise<void> {
+    this.logger.log(`Retrying publish record: ${publishId}`);
+
+    // Find all publishes to locate the one to retry
+    const allPublishes = this.storageService.listAllPublishes({});
+    const record = allPublishes.data.find((p) => p.id === publishId);
+    if (!record) {
+      throw new NotFoundException(`Publish record ${publishId} not found`);
+    }
+
+    if (record.status !== 'failed') {
+      throw new Error(`Publish record ${publishId} is not in failed status`);
+    }
+
+    const build = this.storageService.getBuild(record.buildId);
+    if (!build) {
+      throw new NotFoundException(`Build ${record.buildId} not found for publish record`);
+    }
+
+    const artifactPath = build.platform === 'ios' ? build.artifacts?.ipa : build.artifacts?.apk;
+    if (!artifactPath) {
+      throw new Error(`Build ${record.buildId} has no artifacts, cannot retry`);
+    }
+
+    await this.createPublishTask(record.buildId, record.platform, artifactPath, build.pgyerAccountType);
+  }
+
+  async uploadFile(filePath: string, platform: string, releaseNotes?: string): Promise<{ buildId: string; recordId: string; platform: string }> {
+    this.logger.log(`Uploading file ${filePath} to platform: ${platform}`);
+
+    // Create a temporary build record for tracking
+    const buildId = `upload-${Date.now()}`;
+
+    // Create publish task directly
+    const recordId = await this.createPublishTask(buildId, platform, filePath, undefined, releaseNotes);
+
+    return { buildId, recordId, platform };
   }
 }

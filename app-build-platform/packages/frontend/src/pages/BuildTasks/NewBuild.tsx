@@ -12,6 +12,8 @@ import {
   Spin,
   Checkbox,
   Tag,
+  Modal,
+  Input,
 } from 'antd';
 import { ArrowLeftOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import api from '@/services/api';
@@ -82,9 +84,12 @@ const NewBuild: React.FC = () => {
   const [optionGroups, setOptionGroups] = useState<BuildOptionGroup[]>([]);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [branches, setBranches] = useState<string[]>([]);
-  const [branchesLoading] = useState(false);
+  const [branchesLoading, setBranchesLoading] = useState(false);
   const [platforms, setPlatforms] = useState<Record<string, PlatformConfig>>({});
   const [selectedPlatform, setSelectedPlatform] = useState<string | undefined>();
+  const [credPlatform, setCredPlatform] = useState<string | null>(null);
+  const [credSaving, setCredSaving] = useState(false);
+  const [credForm] = Form.useForm();
 
   useEffect(() => {
     fetchOptions();
@@ -104,6 +109,18 @@ const NewBuild: React.FC = () => {
       message.error('获取配置选项失败');
     } finally {
       setOptionsLoading(false);
+    }
+  };
+
+  const fetchBranches = async () => {
+    setBranchesLoading(true);
+    try {
+      const res = await api.get('/config/branches');
+      setBranches(res.data);
+    } catch {
+      // silent
+    } finally {
+      setBranchesLoading(false);
     }
   };
 
@@ -132,6 +149,34 @@ const NewBuild: React.FC = () => {
     setSelectedPlatform(value);
     // Reset publish targets when platform changes
     form.setFieldValue('publishTargets', []);
+  };
+
+  const openCredModal = (platform: string) => {
+    const plat = platforms[platform];
+    if (!plat) return;
+    const init: Record<string, string> = {};
+    plat.fields.forEach((f) => {
+      if (!f.secret && f.value) init[f.key] = f.value;
+    });
+    credForm.setFieldsValue(init);
+    setCredPlatform(platform);
+  };
+
+  const handleCredSave = async (values: Record<string, string>) => {
+    if (!credPlatform) return;
+    setCredSaving(true);
+    try {
+      await api.put(`/config/publishing/${credPlatform}`, { credentials: values });
+      message.success('凭证已保存');
+      setCredPlatform(null);
+      // Refresh platforms to update configured status
+      const publishingRes = await api.get('/config/publishing');
+      setPlatforms(publishingRes.data);
+    } catch (err: any) {
+      message.error(err.response?.data?.message || '保存失败');
+    } finally {
+      setCredSaving(false);
+    }
   };
 
   const standardGroups = optionGroups.filter((g) => STANDARD_KEYS.includes(g.key));
@@ -241,6 +286,7 @@ const NewBuild: React.FC = () => {
                 size="large"
                 showSearch
                 loading={branchesLoading}
+                onDropdownVisibleChange={(open) => { if (open) fetchBranches(); }}
                 filterOption={(input, option) =>
                   (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
                 }
@@ -336,10 +382,22 @@ const NewBuild: React.FC = () => {
                             <Space>
                               {t.label}
                               {isConfigured ? (
-                                <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontSize: 11 }}>已配置</Tag>
+                                <Tag
+                                  icon={<CheckCircleOutlined />}
+                                  color="success"
+                                  style={{ fontSize: 11, cursor: 'pointer' }}
+                                  onClick={(e) => { e.stopPropagation(); openCredModal(t.key); }}
+                                >
+                                  已配置
+                                </Tag>
                               ) : (
-                                <Tag icon={<CloseCircleOutlined />} color="default" style={{ fontSize: 11 }}>
-                                  {platCfg ? '未配置' : '未启用'}
+                                <Tag
+                                  icon={<CloseCircleOutlined />}
+                                  color="default"
+                                  style={{ fontSize: 11, cursor: 'pointer' }}
+                                  onClick={(e) => { e.stopPropagation(); openCredModal(t.key); }}
+                                >
+                                  {platCfg ? '点击配置' : '未启用'}
                                 </Tag>
                               )}
                             </Space>
@@ -365,6 +423,35 @@ const NewBuild: React.FC = () => {
           </Form>
         </Space>
       </Card>
+
+      {/* Credential configuration modal */}
+      <Modal
+        title={`配置 ${credPlatform ? platforms[credPlatform]?.label || credPlatform : ''}`}
+        open={!!credPlatform}
+        onCancel={() => setCredPlatform(null)}
+        onOk={() => credForm.submit()}
+        confirmLoading={credSaving}
+        width={500}
+      >
+        {credPlatform && platforms[credPlatform] && (
+          <Form form={credForm} layout="vertical" onFinish={handleCredSave}>
+            {platforms[credPlatform].fields.map((f) => (
+              <Form.Item
+                key={f.key}
+                label={f.label}
+                name={f.key}
+                extra={f.secret ? '密钥信息，留空则不覆盖已有值' : undefined}
+              >
+                {f.secret ? (
+                  <Input.Password placeholder={f.configured ? '留空不修改' : `请输入${f.label}`} />
+                ) : (
+                  <Input placeholder={`请输入${f.label}`} />
+                )}
+              </Form.Item>
+            ))}
+          </Form>
+        )}
+      </Modal>
     </div>
   );
 };

@@ -6,8 +6,11 @@ platform :ios do
   desc "Upload IPA to App Store Connect (deliver)"
   lane :publish_appstore do |options|
     artifact_path = options[:artifact_path]
-    apple_id = options[:apple_id]
     bundle_id = options[:bundle_id]
+    issuer_id = options[:issuer_id]
+    key_id = options[:key_id]
+    private_key_path = options[:private_key_path]
+    release_notes = options[:release_notes]
 
     unless artifact_path
       UI.user_error!("artifact_path is required")
@@ -15,16 +18,36 @@ platform :ios do
 
     UI.message("Uploading #{artifact_path} to App Store Connect...")
 
-    deliver(
+    # Use App Store Connect API Key if provided
+    if issuer_id && key_id && private_key_path
+      UI.message("Using App Store Connect API Key authentication")
+
+      app_store_connect_api_key(
+        key_id: key_id,
+        issuer_id: issuer_id,
+        key_filepath: private_key_path,
+        duration: 1200,
+        in_house: false
+      )
+    end
+
+    deliver_options = {
       ipa: artifact_path,
-      apple_id: apple_id,
       app_identifier: bundle_id,
       skip_metadata: true,
       skip_screenshots: true,
       force: true,
       run_precheck_before_submit: false,
       automatic_release: false,
-    )
+    }
+
+    # Add release notes if provided (must be a Hash with locale keys)
+    if release_notes && !release_notes.empty?
+      deliver_options[:release_notes] = { "zh-Hans" => release_notes }
+      UI.message("Including release notes: #{release_notes[0..50]}...")
+    end
+
+    deliver(deliver_options)
 
     UI.success("Uploaded to App Store Connect successfully")
   end
