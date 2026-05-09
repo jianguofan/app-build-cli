@@ -29,7 +29,8 @@ const DirectUpload: React.FC = () => {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const platforms = [
-    { value: 'appstore', label: 'App Store', fileType: '.ipa' },
+    { value: 'appstore', label: 'App Store (CN)', fileType: '.ipa' },
+    { value: 'appstore_over', label: 'App Store (OVER)', fileType: '.ipa' },
     { value: 'pgyer', label: '蒲公英', fileType: '.ipa,.apk' },
     { value: 'xiaomi', label: '小米应用商店', fileType: '.apk' },
     { value: 'huawei', label: '华为应用市场', fileType: '.apk' },
@@ -108,12 +109,12 @@ const DirectUpload: React.FC = () => {
         return false;
       }
 
-      if (selectedPlatform === 'appstore' && !isIPA) {
+      if ((selectedPlatform === 'appstore' || selectedPlatform === 'appstore_over') && !isIPA) {
         message.error('App Store 只支持 .ipa 文件');
         return false;
       }
 
-      if (selectedPlatform !== 'appstore' && selectedPlatform !== 'pgyer' && !isAPK) {
+      if (selectedPlatform !== 'appstore' && selectedPlatform !== 'appstore_over' && selectedPlatform !== 'pgyer' && !isAPK) {
         message.error('该平台只支持 .apk 文件');
         return false;
       }
@@ -195,7 +196,7 @@ const DirectUpload: React.FC = () => {
 
   const getPlatformName = (platform: string) => {
     const names: Record<string, string> = {
-      pgyer: '蒲公英', appstore: 'App Store',
+      pgyer: '蒲公英', appstore: 'App Store (CN)', appstore_over: 'App Store (OVER)',
       xiaomi: '小米', huawei: '华为', honor: '荣耀',
       oppo: 'OPPO', vivo: 'VIVO', tencent: '应用宝',
       qihu360: '360', samsung: '三星',
@@ -299,7 +300,7 @@ const DirectUpload: React.FC = () => {
               </Dragger>
             </div>
 
-            {selectedPlatform === 'appstore' && (
+            {(selectedPlatform === 'appstore' || selectedPlatform === 'appstore_over') && (
               <div>
                 <Text strong>此版本的新增内容：</Text>
                 <Input.TextArea

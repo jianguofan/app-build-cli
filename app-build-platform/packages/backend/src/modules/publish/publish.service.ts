@@ -9,6 +9,7 @@ import { FastlanePublisher } from './publishers/fastlane.publisher';
 
 const FASTLANE_PLATFORMS = [
   'appstore',
+  'appstore_over',
   'xiaomi',
   'huawei',
   'oppo',
@@ -177,6 +178,7 @@ export class PublishService {
       case 'pgyer':
         return this.pgyerPublisher;
       case 'appstore':
+      case 'appstore_over':
       case 'xiaomi':
       case 'huawei':
       case 'tencent':

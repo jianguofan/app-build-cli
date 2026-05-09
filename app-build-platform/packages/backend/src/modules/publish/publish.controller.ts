@@ -57,7 +57,7 @@ export class PublishController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '直接上传', description: '跳过构建状态检查，直接上传产物到指定平台（调试用）' })
   @ApiParam({ name: 'buildId', description: '构建任务 ID' })
-  @ApiParam({ name: 'platform', description: '目标平台', enum: ['appstore', 'pgyer', 'xiaomi', 'huawei', 'oppo', 'vivo', 'tencent', 'qihu360', 'honor', 'samsung'] })
+  @ApiParam({ name: 'platform', description: '目标平台', enum: ['appstore', 'appstore_over', 'pgyer', 'xiaomi', 'huawei', 'oppo', 'vivo', 'tencent', 'qihu360', 'honor', 'samsung'] })
   @ApiResponse({ status: 200, description: '上传任务已创建' })
   async directUpload(
     @Param('buildId') buildId: string,
@@ -107,7 +107,7 @@ export class PublishController {
   )
   @ApiOperation({ summary: '上传文件并发布', description: '直接上传 IPA/APK 文件到指定平台' })
   @ApiConsumes('multipart/form-data')
-  @ApiParam({ name: 'platform', description: '目标平台', enum: ['appstore', 'pgyer', 'xiaomi', 'huawei', 'oppo', 'vivo', 'tencent', 'qihu360', 'honor', 'samsung'] })
+  @ApiParam({ name: 'platform', description: '目标平台', enum: ['appstore', 'appstore_over', 'pgyer', 'xiaomi', 'huawei', 'oppo', 'vivo', 'tencent', 'qihu360', 'honor', 'samsung'] })
   @ApiBody({
     schema: {
       type: 'object',

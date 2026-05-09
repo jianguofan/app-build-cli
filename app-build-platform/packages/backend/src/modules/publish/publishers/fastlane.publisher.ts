@@ -19,6 +19,11 @@ const PLATFORM_MAP: Record<string, FastlanePlatformConfig> = {
     lane: 'publish_appstore',
     requiredFields: ['apple_id', 'bundle_id'],
   },
+  appstore_over: {
+    platform: 'ios',
+    lane: 'publish_appstore',
+    requiredFields: ['apple_id', 'bundle_id'],
+  },
   xiaomi: {
     platform: 'android',
     lane: 'publish_xiaomi',

@@ -89,7 +89,8 @@ const PublishStatus: React.FC<PublishStatusProps> = ({ buildId }) => {
   const getPlatformName = (platform: string) => {
     const names: Record<string, string> = {
       pgyer: '蒲公英',
-      appstore: 'App Store',
+      appstore: 'App Store (CN)',
+      appstore_over: 'App Store (OVER)',
       xiaomi: '小米应用商店',
       huawei: '华为应用市场',
       honor: '荣耀应用市场',

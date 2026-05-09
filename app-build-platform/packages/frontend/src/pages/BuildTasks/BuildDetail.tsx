@@ -131,18 +131,18 @@ const BuildDetail: React.FC = () => {
   const fetchAvailablePlatforms = async (buildPlatform: string) => {
     try {
       const response = await api.get('/config/publishing');
-      const platforms: PublishPlatform[] = response.data
+      const platforms: PublishPlatform[] = Object.values(response.data)
         .filter((p: any) => {
           // iOS 只能发布到 App Store 和蒲公英
           if (buildPlatform === 'ios') {
-            return p.id === 'appstore' || p.id === 'pgyer';
+            return p.platform === 'appstore' || p.platform === 'appstore_over' || p.platform === 'pgyer';
           }
-          // Android 可以发布到所有非 App Store 的平台
-          return p.id !== 'appstore';
+          // Android 可以发布到所有非 App Store（含 OVER）的平台
+          return p.platform !== 'appstore' && p.platform !== 'appstore_over';
         })
         .map((p: any) => ({
-          id: p.id,
-          name: p.name,
+          id: p.platform,
+          name: p.label,
           enabled: p.enabled,
           configured: p.configured,
         }));
@@ -311,6 +311,23 @@ const BuildDetail: React.FC = () => {
               {task.buildMode}
             </Descriptions.Item>
             <Descriptions.Item label="分支">{task.branch}</Descriptions.Item>
+            {task.publishTargets && task.publishTargets.length > 0 && (
+              <Descriptions.Item label="发布目标">
+                <Space>
+                  {task.publishTargets.map((target) => {
+                    const nameMap: Record<string, string> = {
+                      appstore: 'App Store (CN)',
+                      appstore_over: 'App Store (OVER)',
+                      pgyer: '蒲公英',
+                      xiaomi: '小米', huawei: '华为', honor: '荣耀',
+                      oppo: 'OPPO', vivo: 'VIVO', tencent: '应用宝',
+                      qihu360: '360', samsung: '三星',
+                    };
+                    return <Tag key={target}>{nameMap[target] || target}</Tag>;
+                  })}
+                </Space>
+              </Descriptions.Item>
+            )}
             <Descriptions.Item label="创建时间">
               {new Date(task.createdAt).toLocaleString('zh-CN')}
             </Descriptions.Item>

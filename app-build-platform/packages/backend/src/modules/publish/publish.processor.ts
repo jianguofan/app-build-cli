@@ -6,6 +6,7 @@ import { StorageService } from '../storage/storage.service';
 
 const FASTLANE_PLATFORMS = [
   'appstore',
+  'appstore_over',
   'xiaomi',
   'huawei',
   'oppo',
@@ -58,8 +59,8 @@ export class PublishProcessor {
           downloadUrl: result.downloadUrl,
         };
 
-        // For App Store, generate review URL from the apple_id in credentials
-        if (platform === 'appstore') {
+        // For App Store (CN/OVER), generate review URL from the apple_id in credentials
+        if (platform === 'appstore' || platform === 'appstore_over') {
           const appleId = config.credentials?.apple_id;
           if (appleId) {
             updates.reviewUrl = `https://appstoreconnect.apple.com/apps/${appleId}/distribution/ios/version/inflight`;

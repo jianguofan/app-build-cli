@@ -32,7 +32,17 @@ import {
 
 const PLATFORM_META: Record<string, { label: string; fields: { key: string; label: string; secret: boolean }[] }> = {
   appstore: {
-    label: 'App Store Connect',
+    label: 'App Store Connect (CN)',
+    fields: [
+      { key: 'apple_id', label: 'Apple ID', secret: false },
+      { key: 'bundle_id', label: 'Bundle ID', secret: false },
+      { key: 'issuer_id', label: 'Issuer ID', secret: false },
+      { key: 'key_id', label: 'Key ID', secret: false },
+      { key: 'private_key', label: 'Private Key (P8)', secret: true },
+    ],
+  },
+  appstore_over: {
+    label: 'App Store Connect (OVER)',
     fields: [
       { key: 'apple_id', label: 'Apple ID', secret: false },
       { key: 'bundle_id', label: 'Bundle ID', secret: false },
@@ -255,7 +265,7 @@ export class ConfigController {
   @Put('publishing/:platform')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '保存发布平台凭证', description: '保存或更新指定应用商店的 API 凭证（密钥字段为空时不覆盖原值）' })
-  @ApiParam({ name: 'platform', description: '平台标识', enum: ['appstore', 'xiaomi', 'huawei', 'oppo', 'vivo', 'tencent', 'qihu360', 'honor', 'samsung'] })
+  @ApiParam({ name: 'platform', description: '平台标识', enum: ['appstore', 'appstore_over', 'xiaomi', 'huawei', 'oppo', 'vivo', 'tencent', 'qihu360', 'honor', 'samsung'] })
   @ApiBody({ schema: { type: 'object', properties: { credentials: { type: 'object', description: '凭证键值对' } } } })
   savePublishingCredential(
     @Param('platform') platform: string,

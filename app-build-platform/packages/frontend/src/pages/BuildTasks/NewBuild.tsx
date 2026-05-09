@@ -62,7 +62,8 @@ const REGION_LANG_MAP: Record<string, string> = {
 const PLATFORM_PUBLISH_TARGETS: Record<string, { key: string; label: string }[]> = {
   ios: [
     { key: 'pgyer', label: '蒲公英' },
-    { key: 'appstore', label: 'App Store Connect' },
+    { key: 'appstore', label: 'App Store Connect (CN)' },
+    { key: 'appstore_over', label: 'App Store Connect (OVER)' },
   ],
   android: [
     { key: 'pgyer', label: '蒲公英' },
