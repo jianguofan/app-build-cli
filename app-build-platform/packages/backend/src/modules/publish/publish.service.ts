@@ -280,14 +280,14 @@ export class PublishService {
     await this.createPublishTask(record.buildId, record.platform, artifactPath, build.pgyerAccountType);
   }
 
-  async uploadFile(filePath: string, platform: string, releaseNotes?: string): Promise<{ buildId: string; recordId: string; platform: string }> {
+  async uploadFile(filePath: string, platform: string, releaseNotes?: string, pgyerAccountType?: string): Promise<{ buildId: string; recordId: string; platform: string }> {
     this.logger.log(`Uploading file ${filePath} to platform: ${platform}`);
 
     // Create a temporary build record for tracking
     const buildId = `upload-${Date.now()}`;
 
     // Create publish task directly
-    const recordId = await this.createPublishTask(buildId, platform, filePath, undefined, releaseNotes);
+    const recordId = await this.createPublishTask(buildId, platform, filePath, pgyerAccountType, releaseNotes);
 
     return { buildId, recordId, platform };
   }

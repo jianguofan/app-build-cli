@@ -24,6 +24,7 @@ const DirectUpload: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileList, setFileList] = useState<any[]>([]);
   const [releaseNotes, setReleaseNotes] = useState('');
+  const [pgyerAccountType, setPgyerAccountType] = useState<string>('lupeilong');
   const [publishes, setPublishes] = useState<PublishRecord[]>([]);
   const [publishesLoading, setPublishesLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -145,6 +146,9 @@ const DirectUpload: React.FC = () => {
     formData.append('file', fileList[0]);
     if (releaseNotes) {
       formData.append('releaseNotes', releaseNotes);
+    }
+    if (selectedPlatform === 'pgyer' && pgyerAccountType && pgyerAccountType !== 'none') {
+      formData.append('pgyerAccountType', pgyerAccountType);
     }
 
     setUploading(true);
@@ -314,6 +318,25 @@ const DirectUpload: React.FC = () => {
                   style={{ marginTop: 8 }}
                   maxLength={4000}
                   showCount
+                />
+              </div>
+            )}
+
+            {selectedPlatform === 'pgyer' && (
+              <div>
+                <Text strong>蒲公英上传账号：</Text>
+                <Select
+                  style={{ width: 300, marginTop: 8 }}
+                  value={pgyerAccountType}
+                  onChange={setPgyerAccountType}
+                  disabled={uploading}
+                  options={[
+                  { value: 'lupeilong', label: 'LuPeiLong (默认)' },
+                    { value: 'allenli', label: 'AllenLi' },
+                    { value: 'alanwu', label: 'AlanWu' },
+                    { value: 'lb', label: 'LB' },
+                    { value: 'jianguo', label: 'JianGuo' },
+                  ]}
                 />
               </div>
             )}

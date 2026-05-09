@@ -105,12 +105,14 @@ export class WorkspaceService {
     task: BuildTask,
   ): Promise<{ ipa?: string; apk?: string }> {
     const artifacts: { ipa?: string; apk?: string } = {};
+    const versionSuffix = this.getVersionSuffix(workspace);
 
     try {
       if (task.platform === 'ios') {
         const ipaPath = `${workspace}/build/ios/ipa/Snapmaker.ipa`;
         if (await this.fileExists(ipaPath)) {
-          const destPath = `${this.baseDir}/builds/ios/${task.id}.ipa`;
+          const destName = `${task.flavor}-${task.buildMode}-${task.env}${versionSuffix}-${task.id.substring(0, 8)}.ipa`;
+          const destPath = `${this.baseDir}/builds/ios/${destName}`;
           await this.exec(`mkdir -p ${this.baseDir}/builds/ios`);
           await this.exec(`cp ${ipaPath} ${destPath}`);
           artifacts.ipa = destPath;
@@ -119,7 +121,8 @@ export class WorkspaceService {
       } else if (task.platform === 'android') {
         const apkPath = `${workspace}/build/app/outputs/flutter-apk/app-${task.flavor}-${task.buildMode}.apk`;
         if (await this.fileExists(apkPath)) {
-          const destPath = `${this.baseDir}/builds/android/${task.id}.apk`;
+          const destName = `${task.flavor}-${task.buildMode}-${task.env}${versionSuffix}-${task.id.substring(0, 8)}.apk`;
+          const destPath = `${this.baseDir}/builds/android/${destName}`;
           await this.exec(`mkdir -p ${this.baseDir}/builds/android`);
           await this.exec(`cp ${apkPath} ${destPath}`);
           artifacts.apk = destPath;
@@ -132,6 +135,19 @@ export class WorkspaceService {
       this.logger.error(`Failed to collect artifacts: ${error.message}`);
       return artifacts;
     }
+  }
+
+  private getVersionSuffix(workspace: string): string {
+    try {
+      const pubspecPath = path.join(workspace, 'pubspec.yaml');
+      if (!fs.existsSync(pubspecPath)) return '';
+      const content = fs.readFileSync(pubspecPath, 'utf-8');
+      const match = content.match(/^version:\s*(\S+)\+(\S+)$/m);
+      if (match) {
+        return `-v${match[1]}-${match[2]}`;
+      }
+    } catch { /* ignore */ }
+    return '';
   }
 
   async cleanup(workspace: string): Promise<void> {

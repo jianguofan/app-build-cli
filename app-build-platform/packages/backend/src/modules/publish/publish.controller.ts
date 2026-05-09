@@ -129,11 +129,12 @@ export class PublishController {
     @Param('platform') platform: string,
     @UploadedFile() file: Express.Multer.File,
     @Body('releaseNotes') releaseNotes?: string,
+    @Body('pgyerAccountType') pgyerAccountType?: string,
   ) {
     if (!file) {
       throw new Error('请上传文件');
     }
 
-    return this.publishService.uploadFile(file.path, platform, releaseNotes);
+    return this.publishService.uploadFile(file.path, platform, releaseNotes, pgyerAccountType);
   }
 }

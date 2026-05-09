@@ -155,3 +155,20 @@
 - [x] 14.2 BuildDetail 新增「发布目标」展示区域，构建时选择的发布平台以 Tag 形式显示在详情中
 - [x] 14.3 NewBuild 新增 `appstore_over` 发布目标选项（iOS 平台）
 - [x] 14.4 构建自动递增 CFBundleVersion（Unix 时间戳），避免 App Store Connect 重复版本号冲突
+
+## 15. 移除 Android 自动上传入口
+
+- [x] 15.1 评估后确认：Android 各厂商 API 不稳定、变更频繁，手动上传更可靠。App Store 自动上传价值高（必须用 Xcode/Fastlane）。
+- [x] 15.2 DirectUpload 页面移除 Android 平台选项（注释保留）
+- [x] 15.3 NewBuild 页面移除 Android 发布目标列表（注释保留）
+- [x] 15.4 BuildDetail 页面 Android 构建隐藏「重新发布」「直接上传」按钮
+- [x] 15.5 BuildDetail `fetchAvailablePlatforms` Android 分支改为 `return false`（原过滤逻辑注释保留）
+
+## 16. 构建产物命名优化与蒲公英账号选择
+
+- [x] 16.1 workspace.service.ts `collectArtifacts()` 产物文件名从 UUID 改为包含 flavor、buildMode、env、版本号、buildNumber 的描述性名称（如 `cn-release-prod-v2.3.4-1778299640-uuid.ipa`）
+- [x] 16.2 新增 `getVersionSuffix()` 方法，从 pubspec.yaml 读取 version 行，生成版本后缀 `-vX.Y.Z-B`
+- [x] 16.3 build.controller.ts 下载接口文件名同步改进，使用 `{platform}-{flavor}-{buildMode}-{env}-{id}` 格式
+- [x] 16.4 publish.controller.ts `uploadFile()` 新增 `pgyerAccountType` 参数
+- [x] 16.5 publish.service.ts `uploadFile()` 新增 `pgyerAccountType` 参数，传递到 `createPublishTask()`
+- [x] 16.6 DirectUpload 页面新增蒲公英账号选择器（LuPeiLong、AllenLi、AlanWu、LB、JianGuo 五个账号）
