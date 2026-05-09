@@ -139,3 +139,19 @@
 - [x] 12.4 PublishRecord 模型新增 `reviewUrl` 字段
 - [x] 12.5 构建详情页添加强化调试按钮（「直接上传」「多平台选择上传」）
 - [x] 12.6 添加上传记录轮询，自动刷新发布状态
+
+## 13. App Store Over 多应用支持
+
+- [x] 13.1 新增 `appstore_over` 平台配置，支持同一个代码库上传到两个不同的 App Store Connect 应用（CN 和 OVER）
+- [x] 13.2 PLATFORM_META 增加 `appstore_over` 条目（同 `appstore` 字段：apple_id, bundle_id, issuer_id, key_id, private_key）
+- [x] 13.3 PLATFORM_MAP/FASTLANE_PLATFORMS 增加 `appstore_over`（映射到 `ios/publish_appstore` lane）
+- [x] 13.4 getPublisher() switch 增加 `appstore_over` case，修复 `Unknown platform: appstore_over` 错误
+- [x] 13.5 PublishStatus/DirectUpload/BuildDetail/NewBuild 前端组件增加 `appstore_over` 显示和过滤逻辑
+- [x] 13.6 凭证持久化到 `{WORKSPACE_DIR}/publishing-credentials.json`，重启不丢失
+
+## 14. 构建详情与发布目标显示优化
+
+- [x] 14.1 修复 BuildDetail `fetchAvailablePlatforms` 函数 bug：后端 `/config/publishing` 返回对象而非数组，使用 `Object.values()` 正确解析
+- [x] 14.2 BuildDetail 新增「发布目标」展示区域，构建时选择的发布平台以 Tag 形式显示在详情中
+- [x] 14.3 NewBuild 新增 `appstore_over` 发布目标选项（iOS 平台）
+- [x] 14.4 构建自动递增 CFBundleVersion（Unix 时间戳），避免 App Store Connect 重复版本号冲突
