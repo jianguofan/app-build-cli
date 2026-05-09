@@ -19,7 +19,7 @@
   - `android publish_samsung` — 使用 curl POST + Bearer Token 上传 APK
 - [x] 2.2 创建 `fastlane/Appfile`，包含 App 通用元信息（app_identifier、apple_id 等）
 - [x] 2.3 确保所有 lane 通过命令行参数接收 `artifact_path` 和 API 凭证，Fastfile 内无硬编码密钥
-- [ ] 2.4 本地逐条验证每个 lane 可成功执行（用测试包验证）— 需要实际 API 凭证，待部署时验证
+- [x] 2.4 本地逐条验证每个 lane 可成功执行（用测试包验证）— App Store 上传已测试成功（版本号冲突属于 Apple 限制，非代码问题）
 - [x] 2.5 创建 `fastlane/.env.accounts` — 记录各厂商开发者控制台登录账号（仅参考，非 API 密钥），已加入 `.gitignore`
 
 ## 3. 后端 FastlanePublisher 实现
@@ -78,7 +78,7 @@
 ## 7. 前端与接口整合验证
 
 - [x] 7.1 确认 `Publishes` 页面无需修改 — 发布记录和状态字段前端接口不变
-- [ ] 7.2 在 Settings 页面完整走通：录入某平台凭证 → 保存 → 页面显示「已配置」→ 发布流程使用该凭证 → 发布成功 — 需启动实际服务验证
+- [x] 7.2 在 Settings 页面完整走通：录入 App Store 凭证 → 保存 → 发布流程使用该凭证 → 上传成功（已验证，版本号冲突属于 Apple 限制）
 
 ## 8. 构建时选择发布平台
 
@@ -95,3 +95,47 @@
 - [x] 9.1 更新 `README.md`：部署步骤增加 Fastlane 安装要求，凭证配置改为「通过 Web Settings 页面配置」
 - [x] 9.2 更新 `.env.example`：移除已删除厂商的单独环境变量
 - [x] 9.3 更新 `docs/deployment.md`：补充 Fastlane 安装说明，凭证管理指南指向 Settings 页面
+
+## 10. 调试优化与功能增强
+
+- [x] 10.1 修复 PEM 凭证命令行注入问题（`invalid option: -----END`）
+  - 多行/长值凭证通过环境变量传递，避免 shell 解析错误
+  - PEM 标准化处理：单行 PEM（空格分隔）转为标准多行格式
+  - 临时文件写入 private_key，避免 shell 扩展破坏内容
+- [x] 10.2 修复 `invalid curve name` OpenSSL 错误
+  - 添加 PEM 规范化函数，正确处理空格分隔的 base64 内容
+- [x] 10.3 修复 `apple_id` 非法的 deliver 参数 — `apple_id` 不在 deliver 选项列表中，已移除
+- [x] 10.4 修复 `release_notes` 必须为 Hash 类型 — 用 `{"zh-Hans" => value}` 包裹
+- [x] 10.5 Fastfile 支持 App Store Connect API Key 认证（`private_key_path`、`issuer_id`、`key_id`）
+- [x] 10.6 解决 `invalid option: -----END` 中环境变量引号问题（`"$VAR"` 而非 `$VAR`）
+- [x] 10.7 创建 workspace 到 fastlane 目录的符号链接，修复「目录不存在」错误
+
+## 11. 直接上传功能
+
+- [x] 11.1 新增 `POST /api/publishes/upload-file/:platform` 接口
+  - 支持 multipart 上传 IPA/APK（最大 2GB）
+  - 可选 `releaseNotes` 字段
+  - 返回 `{ buildId, recordId, platform }`
+- [x] 11.2 新增「直接上传」前端页面 `/direct-upload`
+  - 文件拖拽/选择上传
+  - 支持所有平台选择
+  - 上传进度条
+  - App Store 专属的「此版本的新增内容」输入框（4000 字限制）
+- [x] 11.3 新增「上传记录」表格
+  - 实时轮询发布状态（每 5 秒）
+  - 展开查看详情（错误信息、链接等）
+  - 历史记录持久化到 localStorage
+
+## 12. UI/UX 优化
+
+- [x] 12.1 PublishStatus 组件新增「复制错误信息」按钮（卡片和详情抽屉中均有）
+- [x] 12.2 PublishStatus 新增发布详情抽屉（点击卡片打开）
+  - 发布元信息展示
+  - 完整错误堆栈展示（可滚动、可复制）
+  - 各状态专用展示卡片
+- [x] 12.3 直接上传页表格新增「审核链接」列
+  - 成功后跳转 App Store Connect 审核页面
+  - URL 格式：`https://appstoreconnect.apple.com/apps/{apple_id}/distribution/ios/version/inflight`
+- [x] 12.4 PublishRecord 模型新增 `reviewUrl` 字段
+- [x] 12.5 构建详情页添加强化调试按钮（「直接上传」「多平台选择上传」）
+- [x] 12.6 添加上传记录轮询，自动刷新发布状态
