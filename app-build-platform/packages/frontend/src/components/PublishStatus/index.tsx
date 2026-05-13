@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Card, Row, Col, Tag, Typography, Space, Spin, Button, message, Drawer, Descriptions } from 'antd';
 import {
   CheckCircleOutlined,
@@ -10,6 +10,7 @@ import {
   EyeOutlined,
   LinkOutlined,
 } from '@ant-design/icons';
+import { io, Socket } from 'socket.io-client';
 import api from '@/services/api';
 
 const { Title, Text, Paragraph } = Typography;
@@ -34,11 +35,55 @@ const PublishStatus: React.FC<PublishStatusProps> = ({ buildId }) => {
   const [publishes, setPublishes] = useState<PublishRecord[]>([]);
   const [retrying, setRetrying] = useState<Record<string, boolean>>({});
   const [selectedPublish, setSelectedPublish] = useState<PublishRecord | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     fetchPublishes();
-    const interval = setInterval(fetchPublishes, 10000);
-    return () => clearInterval(interval);
+
+    // Connect to WebSocket for real-time updates
+    const socket = io(`${import.meta.env.VITE_WS_URL || 'ws://localhost:3000'}/publishes`, {
+      transports: ['websocket'],
+    });
+
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('WebSocket connected to publishes namespace, subscribing to build:', buildId);
+      socket.emit('subscribe', buildId);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('WebSocket connection error:', error);
+    });
+
+    socket.on('publishStatus', (data: { buildId: string; publish: PublishRecord }) => {
+      console.log('Received publish status update:', data);
+      if (data.buildId === buildId) {
+        setPublishes((prev) => {
+          const index = prev.findIndex((p) => p.id === data.publish.id);
+          if (index >= 0) {
+            // Update existing record
+            const updated = [...prev];
+            updated[index] = data.publish;
+            return updated;
+          } else {
+            // Add new record
+            return [...prev, data.publish];
+          }
+        });
+      }
+    });
+
+    // Fallback polling every 30 seconds (reduced from 10s since we have WebSocket)
+    const interval = setInterval(fetchPublishes, 30000);
+
+    return () => {
+      clearInterval(interval);
+      if (socketRef.current) {
+        socketRef.current.emit('unsubscribe', buildId);
+        socketRef.current.disconnect();
+      }
+    };
   }, [buildId]);
 
   const fetchPublishes = async () => {

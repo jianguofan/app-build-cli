@@ -123,6 +123,16 @@ export class StorageService {
     return this.publishes.get(buildId) || [];
   }
 
+  getPublishById(id: string): PublishRecord | undefined {
+    for (const records of this.publishes.values()) {
+      const record = records.find((r) => r.id === id);
+      if (record) {
+        return record;
+      }
+    }
+    return undefined;
+  }
+
   updatePublish(id: string, updates: Partial<PublishRecord>): void {
     for (const [buildId, records] of this.publishes.entries()) {
       const record = records.find((r) => r.id === id);

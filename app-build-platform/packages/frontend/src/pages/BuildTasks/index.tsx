@@ -10,7 +10,7 @@ import {
   message,
   Popconfirm,
 } from 'antd';
-import { PlusOutlined, ReloadOutlined, EyeOutlined, DeleteOutlined, RedoOutlined } from '@ant-design/icons';
+import { PlusOutlined, ReloadOutlined, EyeOutlined, DeleteOutlined, RedoOutlined, StopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import api from '@/services/api';
 
@@ -23,7 +23,7 @@ interface BuildTask {
   env: 'dev' | 'pre' | 'prod';
   buildMode: 'debug' | 'release';
   branch: string;
-  status: 'pending' | 'running' | 'success' | 'failed';
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
   createdAt: string;
   completedAt?: string;
   duration?: number;
@@ -82,12 +82,23 @@ const BuildTasks: React.FC = () => {
     }
   };
 
+  const handleCancel = async (record: BuildTask) => {
+    try {
+      await api.post(`/builds/${record.id}/cancel`);
+      message.success('构建已取消');
+      fetchBuilds(pagination.current, pagination.pageSize);
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '取消失败');
+    }
+  };
+
   const getStatusTag = (status: string) => {
     const statusConfig: Record<string, { color: string; text: string }> = {
       pending: { color: 'default', text: '等待中' },
       running: { color: 'processing', text: '进行中' },
       success: { color: 'success', text: '成功' },
       failed: { color: 'error', text: '失败' },
+      cancelled: { color: 'warning', text: '已取消' },
     };
     const config = statusConfig[status] || statusConfig.pending;
     return <Tag color={config.color}>{config.text}</Tag>;
@@ -178,6 +189,18 @@ const BuildTasks: React.FC = () => {
           >
             查看
           </Button>
+          {(record.status === 'pending' || record.status === 'running') && (
+            <Popconfirm
+              title="确定取消此构建？"
+              onConfirm={() => handleCancel(record)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button type="link" size="small" danger icon={<StopOutlined />}>
+                取消
+              </Button>
+            </Popconfirm>
+          )}
           <Button
             type="link"
             size="small"

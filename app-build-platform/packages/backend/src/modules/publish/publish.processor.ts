@@ -40,6 +40,8 @@ export class PublishProcessor {
     const { recordId, buildId, platform, artifactPath, pgyerAccountType, releaseNotes } = job.data;
 
     this.logger.log(`Processing publish task: ${recordId} for platform: ${platform}`);
+    this.logger.log(`Artifact path: ${artifactPath}`);
+    this.logger.log(`Pgyer account type: ${pgyerAccountType || 'default'}`);
 
     try {
       // 更新状态为 uploading
@@ -47,12 +49,16 @@ export class PublishProcessor {
 
       // 获取发布器
       const publisher = this.publishService.getPublisher(platform);
+      this.logger.log(`Using publisher: ${publisher.platform}`);
 
       // 获取配置
       const config = this.getPublishConfig(platform, pgyerAccountType, releaseNotes);
+      this.logger.log(`Config prepared for platform: ${platform}`);
 
       // 执行上传
+      this.logger.log(`Starting upload to ${platform}...`);
       const result = await publisher.upload(artifactPath, config);
+      this.logger.log(`Upload result: ${JSON.stringify({ success: result.success, error: result.error })}`);
 
       if (result.success) {
         const updates: any = {
@@ -118,12 +124,21 @@ export class PublishProcessor {
     const { ConfigService } = require('@nestjs/config');
     // PGYER API keys remain in env vars since Pgyer publisher is unchanged
     const apiKey = process.env.PGYER_API_KEY;
+
+    this.logger.log(`Getting Pgyer API key for account type: ${accountType || 'default'}`);
+
     if (accountType) {
-      const accountKey = process.env[`PGYER_API_KEY_${accountType.toUpperCase()}`];
+      const envKey = `PGYER_API_KEY_${accountType.toUpperCase()}`;
+      const accountKey = process.env[envKey];
+      this.logger.log(`Checking env var: ${envKey}, exists: ${!!accountKey}, is placeholder: ${accountKey?.startsWith('your_')}`);
       if (accountKey && !accountKey.startsWith('your_')) {
+        this.logger.log(`Using account-specific API key for ${accountType}`);
         return accountKey;
       }
     }
-    return apiKey && !apiKey.startsWith('your_') ? apiKey : undefined;
+
+    const hasDefaultKey = apiKey && !apiKey.startsWith('your_');
+    this.logger.log(`Using default PGYER_API_KEY, exists: ${!!apiKey}, is placeholder: ${apiKey?.startsWith('your_')}`);
+    return hasDefaultKey ? apiKey : undefined;
   }
 }

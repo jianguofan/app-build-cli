@@ -88,16 +88,17 @@ export class WorkspaceService {
     const signingExists = await this.dirExists(signingDir);
     if (signingExists) {
       await this.exec(
-        `cp ${signingDir}/key.properties ${this.repoDir}/android/key.properties 2>/dev/null || true`,
+        `cp ${signingDir}/key.properties ${this.repoDir}/lava-app/android/key.properties 2>/dev/null || true`,
       );
       await this.exec(
-        `cp ${signingDir}/signedkey.jks ${this.repoDir}/android/signedkey.jks 2>/dev/null || true`,
+        `cp ${signingDir}/signedkey.jks ${this.repoDir}/lava-app/android/signedkey.jks 2>/dev/null || true`,
       );
       this.logger.log('Restored signing files');
     }
 
-    this.logger.log(`Workspace ready: ${this.repoDir} (branch: ${task.branch})`);
-    return this.repoDir;
+    const projectDir = `${this.repoDir}/lava-app`;
+    this.logger.log(`Workspace ready: ${projectDir} (branch: ${task.branch})`);
+    return projectDir;
   }
 
   async collectArtifacts(

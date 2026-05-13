@@ -9,6 +9,7 @@ import {
   UserOutlined,
   LogoutOutlined,
   UploadOutlined,
+  ShopOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/stores/authStore';
 import type { MenuProps } from 'antd';
@@ -35,6 +36,11 @@ const MainLayout: React.FC = () => {
       key: '/publishes',
       icon: <CloudUploadOutlined />,
       label: '发布管理',
+    },
+    {
+      key: '/store-accounts',
+      icon: <ShopOutlined />,
+      label: '应用商店',
     },
     {
       key: '/direct-upload',

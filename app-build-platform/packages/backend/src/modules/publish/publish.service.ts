@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { v4 as uuidv4 } from 'uuid';
@@ -6,6 +6,7 @@ import { StorageService } from '../storage/storage.service';
 import { PublishRecord } from '../storage/models';
 import { PgyerPublisher } from './publishers/pgyer.publisher';
 import { FastlanePublisher } from './publishers/fastlane.publisher';
+import { PublishGateway } from './publish.gateway';
 
 const FASTLANE_PLATFORMS = [
   'appstore',
@@ -29,6 +30,8 @@ export class PublishService {
     private storageService: StorageService,
     private pgyerPublisher: PgyerPublisher,
     private fastlanePublisher: FastlanePublisher,
+    @Inject(forwardRef(() => PublishGateway))
+    private publishGateway: PublishGateway,
   ) {}
 
   async publish(
@@ -171,6 +174,12 @@ export class PublishService {
 
     this.storageService.updatePublish(recordId, updateData);
     this.logger.log(`Updated publish record ${recordId} status to ${status}`);
+
+    // Get the updated record and emit via WebSocket
+    const record = this.storageService.getPublishById(recordId);
+    if (record && this.publishGateway) {
+      this.publishGateway.emitPublishStatus(record.buildId, record);
+    }
   }
 
   getPublisher(platform: string) {

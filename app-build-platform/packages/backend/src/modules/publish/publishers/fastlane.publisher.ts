@@ -108,6 +108,8 @@ export class FastlanePublisher extends BasePublisher {
     const targetPlatform = config.targetPlatform;
     const cfg = PLATFORM_MAP[targetPlatform];
 
+    this.logger.log(`Fastlane upload starting - platform: ${targetPlatform}, artifact: ${artifactPath}`);
+
     if (!cfg) {
       return { success: false, error: `Unknown fastlane platform: ${targetPlatform}` };
     }
@@ -115,11 +117,16 @@ export class FastlanePublisher extends BasePublisher {
     let keyTempFile: string | null = null;
 
     try {
+      this.logger.log(`Validating credentials for ${targetPlatform}...`);
       await this.validateConfig(config.credentials, cfg.requiredFields);
 
       if (!fs.existsSync(artifactPath)) {
+        this.logger.error(`Artifact file not found: ${artifactPath}`);
         throw new Error(`Artifact file not found: ${artifactPath}`);
       }
+
+      const fileStats = fs.statSync(artifactPath);
+      this.logger.log(`Artifact file found - size: ${(fileStats.size / 1024 / 1024).toFixed(2)} MB`);
 
       // Build fastlane command with credentials as environment variables
       const credEnv: Record<string, string> = {};

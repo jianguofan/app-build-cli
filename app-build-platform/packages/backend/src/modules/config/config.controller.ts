@@ -114,6 +114,21 @@ const PLATFORM_META: Record<string, { label: string; fields: { key: string; labe
   },
 };
 
+const STORE_URLS: Record<string, string> = {
+  appstore: 'https://appstoreconnect.apple.com/',
+  appstore_over: 'https://appstoreconnect.apple.com/',
+  xiaomi: 'https://developer.xiaomi.com/',
+  huawei: 'https://developer.huawei.com/consumer/cn/',
+  oppo: 'https://open.oppomobile.com/',
+  vivo: 'https://developer.vivo.com.cn/',
+  tencent: 'https://op.open.qq.com/',
+  qihu360: 'https://dev.360.cn/',
+  honor: 'https://developer.honor.com/',
+  samsung: 'https://seller.samsungapps.com/',
+};
+
+const APPLE_PLATFORMS = ['appstore', 'appstore_over'];
+
 @ApiTags('config')
 @ApiBearerAuth()
 @Controller('config')
@@ -308,6 +323,32 @@ export class ConfigController {
     const record = this.storageService.togglePublishingPlatform(platform, body.enabled);
     if (!record) throw new NotFoundException(`Platform ${platform} not configured yet`);
     return { platform: record.platform, enabled: record.enabled };
+  }
+
+  // ==================== Store Accounts ====================
+
+  @Get('store-accounts')
+  @ApiOperation({ summary: '获取应用商店账号信息', description: '返回所有应用商店的开发者控制台地址和凭证（Apple 平台不返回凭证）' })
+  getStoreAccounts() {
+    return Object.entries(PLATFORM_META).map(([platform, meta]) => {
+      const cred = this.storageService.getPublishingCredential(platform);
+      const isApple = APPLE_PLATFORMS.includes(platform);
+
+      return {
+        platform,
+        label: meta.label,
+        url: STORE_URLS[platform] || '',
+        isApple,
+        configured: !!(cred && Object.keys(cred.credentials).length > 0),
+        fields: isApple
+          ? []
+          : meta.fields.map((f) => ({
+              ...f,
+              value: cred?.credentials?.[f.key] || '',
+              configured: !!cred?.credentials?.[f.key],
+            })),
+      };
+    });
   }
 
   // ==================== Option Groups ====================

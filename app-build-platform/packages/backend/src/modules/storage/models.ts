@@ -10,7 +10,7 @@ export interface BuildTask {
   pgyerAccountType?: string;
   customParams?: Record<string, string>;
   publishTargets?: string[];
-  status: 'pending' | 'running' | 'success' | 'failed';
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;

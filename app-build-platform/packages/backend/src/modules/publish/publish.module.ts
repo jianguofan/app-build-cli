@@ -5,6 +5,7 @@ import { PublishService } from './publish.service';
 import { PublishProcessor } from './publish.processor';
 import { PgyerPublisher } from './publishers/pgyer.publisher';
 import { FastlanePublisher } from './publishers/fastlane.publisher';
+import { PublishGateway } from './publish.gateway';
 import { ExecutorModule } from '../executor/executor.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { ExecutorModule } from '../executor/executor.module';
     PublishProcessor,
     PgyerPublisher,
     FastlanePublisher,
+    PublishGateway,
   ],
   exports: [PublishService],
 })

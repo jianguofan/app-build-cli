@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NodeSSH } from 'node-ssh';
 import { ConfigService } from '@nestjs/config';
-import { exec as execCb, spawn } from 'child_process';
+import { exec as execCb, spawn, ChildProcess } from 'child_process';
 
 @Injectable()
 export class ExecutorService {
   private readonly logger = new Logger(ExecutorService.name);
   private ssh: NodeSSH;
+  private readonly processes: Map<string, ChildProcess> = new Map();
 
   constructor(private configService: ConfigService) {
     this.ssh = new NodeSSH();
@@ -56,12 +57,13 @@ export class ExecutorService {
   }
 
   async localExecute(options: {
+    taskId?: string;
     workspace: string;
     script: string;
     args: string[];
     onLog: (line: string) => void;
   }): Promise<{ code: number; stdout: string; stderr: string }> {
-    const { workspace, script, args, onLog } = options;
+    const { taskId, workspace, script, args, onLog } = options;
 
     const keychainPwd = this.configService.get<string>('KEYCHAIN_PASSWORD') || '';
     if (keychainPwd) {
@@ -81,6 +83,12 @@ export class ExecutorService {
         shell: '/bin/zsh',
         env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
       });
+
+      // Store process reference if taskId provided
+      if (taskId) {
+        this.processes.set(taskId, child);
+        this.logger.log(`Registered process for task ${taskId}`);
+      }
 
       let stdout = '';
       let stderr = '';
@@ -106,6 +114,12 @@ export class ExecutorService {
       });
 
       child.on('close', (code) => {
+        // Clean up process reference
+        if (taskId) {
+          this.processes.delete(taskId);
+          this.logger.log(`Removed process for task ${taskId}`);
+        }
+
         if (code === 0) {
           this.logger.log('Command executed successfully');
           resolve({ code, stdout, stderr });
@@ -116,6 +130,10 @@ export class ExecutorService {
       });
 
       child.on('error', (error) => {
+        // Clean up process reference on error
+        if (taskId) {
+          this.processes.delete(taskId);
+        }
         this.logger.error(`Command execution error: ${error.message}`);
         reject(error);
       });
@@ -138,6 +156,36 @@ export class ExecutorService {
     } catch {
       return false;
     }
+  }
+
+  async cancelProcess(taskId: string): Promise<boolean> {
+    const child = this.processes.get(taskId);
+    if (!child) {
+      this.logger.warn(`Process for task ${taskId} not found`);
+      return false;
+    }
+
+    this.logger.log(`Cancelling process for task ${taskId}`);
+
+    // Send SIGTERM for graceful termination
+    child.kill('SIGTERM');
+
+    // Escalate to SIGKILL after 5 seconds if process doesn't exit
+    const killTimeout = setTimeout(() => {
+      if (!child.killed) {
+        this.logger.warn(`Process ${taskId} didn't respond to SIGTERM, sending SIGKILL`);
+        child.kill('SIGKILL');
+      }
+    }, 5000);
+
+    // Clear timeout when process exits
+    child.once('exit', () => {
+      clearTimeout(killTimeout);
+      this.processes.delete(taskId);
+      this.logger.log(`Process for task ${taskId} terminated`);
+    });
+
+    return true;
   }
 
   // SSH-based execution (kept for backward compatibility)

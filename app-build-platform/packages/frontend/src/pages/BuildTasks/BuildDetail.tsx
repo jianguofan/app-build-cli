@@ -12,12 +12,14 @@ import {
   message,
   Modal,
   Checkbox,
+  Popconfirm,
 } from 'antd';
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
   ReloadOutlined,
   CloudUploadOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 import { io, Socket } from 'socket.io-client';
 import api from '@/services/api';
@@ -33,7 +35,7 @@ interface BuildTask {
   env: string;
   buildMode: string;
   branch: string;
-  status: 'pending' | 'running' | 'success' | 'failed';
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -83,8 +85,16 @@ const BuildDetail: React.FC = () => {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      console.log('WebSocket connected');
+      console.log('WebSocket connected, subscribing to task:', id);
       socket.emit('subscribe', id);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('WebSocket connection error:', error);
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('WebSocket disconnected:', reason);
     });
 
     socket.on('log', (data: { taskId: string; log: string }) => {
@@ -96,6 +106,9 @@ const BuildDetail: React.FC = () => {
     socket.on('status', (data: { taskId: string; status: string }) => {
       if (data.taskId === id) {
         setTask((prev) => (prev ? { ...prev, status: data.status as any } : null));
+        if (data.status === 'cancelled') {
+          message.info('构建已被取消');
+        }
       }
     });
 
@@ -161,6 +174,18 @@ const BuildDetail: React.FC = () => {
   const handleDirectUpload = () => {
     setSelectedUploadPlatforms([]);
     setUploadModalVisible(true);
+  };
+
+  const handleCancel = async () => {
+    if (!id) return;
+
+    try {
+      await api.post(`/builds/${id}/cancel`);
+      message.success('构建已取消');
+      fetchTaskDetail();
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '取消失败');
+    }
   };
 
   const handleUploadConfirm = async () => {
@@ -238,6 +263,7 @@ const BuildDetail: React.FC = () => {
       running: { color: 'processing', text: '进行中' },
       success: { color: 'success', text: '成功' },
       failed: { color: 'error', text: '失败' },
+      cancelled: { color: 'warning', text: '已取消' },
     };
     const config = statusConfig[status] || statusConfig.pending;
     return <Tag color={config.color}>{config.text}</Tag>;
@@ -290,9 +316,23 @@ const BuildDetail: React.FC = () => {
               <Title level={2} style={{ margin: 0 }}>
                 构建任务详情
               </Title>
-              <Button icon={<ReloadOutlined />} onClick={fetchTaskDetail}>
-                刷新
-              </Button>
+              <Space>
+                {(task.status === 'pending' || task.status === 'running') && (
+                  <Popconfirm
+                    title="确定取消此构建？"
+                    onConfirm={handleCancel}
+                    okText="确定"
+                    cancelText="取消"
+                  >
+                    <Button danger icon={<StopOutlined />}>
+                      取消构建
+                    </Button>
+                  </Popconfirm>
+                )}
+                <Button icon={<ReloadOutlined />} onClick={fetchTaskDetail}>
+                  刷新
+                </Button>
+              </Space>
             </div>
           </div>
 
@@ -356,7 +396,7 @@ const BuildDetail: React.FC = () => {
             )}
           </Descriptions>
 
-          {task.artifacts && (task.artifacts.ipa || task.artifacts.apk) && (
+          {task.artifacts && (task.artifacts.ipa || task.artifacts.apk) && task.status !== 'cancelled' && (
             <>
               <Divider />
               <div>

@@ -65,18 +65,18 @@ const PLATFORM_PUBLISH_TARGETS: Record<string, { key: string; label: string }[]>
     { key: 'appstore', label: 'App Store Connect (CN)' },
     { key: 'appstore_over', label: 'App Store Connect (OVER)' },
   ],
-  // Android uploads are done manually via web console
-  // android: [
-  //   { key: 'pgyer', label: '蒲公英' },
-  //   { key: 'xiaomi', label: '小米应用商店' },
-  //   { key: 'huawei', label: '华为应用市场' },
-  //   { key: 'honor', label: '荣耀应用市场' },
-  //   { key: 'oppo', label: 'OPPO 软件商店' },
-  //   { key: 'vivo', label: 'VIVO 应用商店' },
-  //   { key: 'tencent', label: '应用宝' },
-  //   { key: 'qihu360', label: '360 手机助手' },
-  //   { key: 'samsung', label: '三星应用商店' },
-  // ],
+  android: [
+    { key: 'pgyer', label: '蒲公英' },
+    // Other Android stores are uploaded manually via web console
+    // { key: 'xiaomi', label: '小米应用商店' },
+    // { key: 'huawei', label: '华为应用市场' },
+    // { key: 'honor', label: '荣耀应用市场' },
+    // { key: 'oppo', label: 'OPPO 软件商店' },
+    // { key: 'vivo', label: 'VIVO 应用商店' },
+    // { key: 'tencent', label: '应用宝' },
+    // { key: 'qihu360', label: '360 手机助手' },
+    // { key: 'samsung', label: '三星应用商店' },
+  ],
 };
 
 const NewBuild: React.FC = () => {
@@ -377,6 +377,25 @@ const NewBuild: React.FC = () => {
                   <Checkbox.Group style={{ width: '100%' }}>
                     <Space direction="vertical" style={{ width: '100%' }}>
                       {publishTargets.map((t) => {
+                        // Pgyer is always available (configured via env vars)
+                        if (t.key === 'pgyer') {
+                          return (
+                            <Checkbox key={t.key} value={t.key}>
+                              <Space>
+                                {t.label}
+                                <Tag
+                                  icon={<CheckCircleOutlined />}
+                                  color="success"
+                                  style={{ fontSize: 11 }}
+                                >
+                                  已配置
+                                </Tag>
+                              </Space>
+                            </Checkbox>
+                          );
+                        }
+
+                        // Other platforms check database credentials
                         const platCfg = platforms[t.key];
                         const isConfigured = platCfg?.configured && platCfg?.enabled;
                         return (
