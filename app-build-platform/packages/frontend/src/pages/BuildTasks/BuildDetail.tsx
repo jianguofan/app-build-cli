@@ -74,47 +74,56 @@ const BuildDetail: React.FC = () => {
   useEffect(() => {
     if (!id) return;
 
-    // 获取任务详情
-    fetchTaskDetail();
+    let socket: Socket | null = null;
 
-    // 连接 WebSocket
-    const socket = io(`${import.meta.env.VITE_WS_URL || 'ws://localhost:3000'}/builds`, {
-      transports: ['websocket'],
-    });
+    const init = async () => {
+      // 1. 先拉取任务详情和历史日志（含运行中的 live logs）
+      await fetchTaskDetail();
 
-    socketRef.current = socket;
+      // 2. 再连接 WebSocket 获取实时日志，避免竞态覆盖
+      socket = io(`${import.meta.env.VITE_WS_URL || 'ws://localhost:3000'}/builds`, {
+        transports: ['websocket'],
+      });
 
-    socket.on('connect', () => {
-      console.log('WebSocket connected, subscribing to task:', id);
-      socket.emit('subscribe', id);
-    });
+      socketRef.current = socket;
 
-    socket.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error);
-    });
+      socket.on('connect', () => {
+        console.log('WebSocket connected, subscribing to task:', id);
+        socket!.emit('subscribe', id);
+      });
 
-    socket.on('disconnect', (reason) => {
-      console.log('WebSocket disconnected:', reason);
-    });
+      socket.on('connect_error', (error) => {
+        console.error('WebSocket connection error:', error);
+      });
 
-    socket.on('log', (data: { taskId: string; log: string }) => {
-      if (data.taskId === id) {
-        setLogs((prev) => [...prev, data.log]);
-      }
-    });
+      socket.on('disconnect', (reason) => {
+        console.log('WebSocket disconnected:', reason);
+      });
 
-    socket.on('status', (data: { taskId: string; status: string }) => {
-      if (data.taskId === id) {
-        setTask((prev) => (prev ? { ...prev, status: data.status as any } : null));
-        if (data.status === 'cancelled') {
-          message.info('构建已被取消');
+      socket.on('log', (data: { taskId: string; log: string }) => {
+        if (data.taskId === id) {
+          setLogs((prev) => [...prev, data.log]);
         }
-      }
-    });
+      });
+
+      socket.on('status', (data: { taskId: string; status: string }) => {
+        if (data.taskId === id) {
+          setTask((prev) => (prev ? { ...prev, status: data.status as any } : null));
+          if (data.status === 'success' || data.status === 'failed' || data.status === 'cancelled') {
+            if (data.status === 'cancelled') message.info('构建已被取消');
+            fetchTaskDetail();
+          }
+        }
+      });
+    };
+
+    init();
 
     return () => {
-      socket.emit('unsubscribe', id);
-      socket.disconnect();
+      if (socket) {
+        socket.emit('unsubscribe', id);
+        socket.disconnect();
+      }
     };
   }, [id]);
 

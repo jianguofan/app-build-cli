@@ -217,11 +217,11 @@ export class WorkspaceService {
     const logFile = `${this.baseDir}/logs/${taskId}.log`;
 
     try {
-      await this.exec(`mkdir -p ${this.baseDir}/logs`);
-      const logContent = logs.join('\n');
-      await this.exec(
-        `echo "${logContent.replace(/"/g, '\\"')}" > ${logFile}`,
-      );
+      const logDir = `${this.baseDir}/logs`;
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      fs.writeFileSync(logFile, logs.join('\n'), 'utf-8');
       this.logger.log(`Saved logs to: ${logFile}`);
       return logFile;
     } catch (error: any) {
