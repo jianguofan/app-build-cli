@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { NodeSSH } from 'node-ssh';
 import { ConfigService } from '@nestjs/config';
 import { exec as execCb, spawn, ChildProcess } from 'child_process';
+import * as fs from 'fs';
 
 @Injectable()
 export class ExecutorService {
@@ -43,10 +44,14 @@ export class ExecutorService {
   }
 
   // Local process execution (no SSH overhead)
+  // Use the system's default shell (SHELL env var), fallback to /bin/zsh then /bin/bash
+  private getShell(): string {
+    return process.env.SHELL || '/bin/zsh';
+  }
 
   async localExec(command: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      execCb(command, { shell: '/bin/zsh', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
+      execCb(command, { shell: this.getShell(), env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
         if (error) {
           reject(new Error(stderr || error.message));
           return;
@@ -74,13 +79,22 @@ export class ExecutorService {
       }
     }
 
+    // Verify workspace directory and build script exist (use fs directly to avoid shell dependency)
+    if (!fs.existsSync(workspace)) {
+      throw new Error(`Workspace directory does not exist: ${workspace}`);
+    }
+
     const scriptPath = `${workspace}/${script}`;
+    if (!fs.existsSync(scriptPath)) {
+      throw new Error(`Build script not found: ${scriptPath}`);
+    }
+
     this.logger.log(`Executing: ${scriptPath} ${args.join(' ')}`);
 
     return new Promise((resolve, reject) => {
       const child = spawn(scriptPath, args, {
         cwd: workspace,
-        shell: '/bin/zsh',
+        shell: this.getShell(),
         env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
       });
 

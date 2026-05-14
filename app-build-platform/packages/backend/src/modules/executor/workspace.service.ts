@@ -27,8 +27,8 @@ export class WorkspaceService {
   private dirExists = (p: string) => this.executorService.localDirectoryExists(p);
 
   /**
-   * Bump CFBundleVersion for iOS builds by updating pubspec.yaml's build number
-   * to the current Unix timestamp, ensuring each upload has a unique version.
+   * Bump CFBundleVersion for iOS builds by updating pubspec.yaml's build number.
+   * Format: 13 + YY + MM + DD + NN (e.g. 1326051300 → prefix=13, 2026-05-13, build #00)
    */
   async bumpBuildNumber(workspace: string): Promise<string> {
     const pubspecPath = path.join(workspace, 'pubspec.yaml');
@@ -47,10 +47,29 @@ export class WorkspaceService {
       return '0';
     }
 
-    const newBuildNumber = String(Math.floor(Date.now() / 1000));
+    const currentBuildNumber = match[2];
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const datePrefix = `13${yy}${mm}${dd}`;
+
+    // If existing build number has the same date prefix, increment the counter;
+    // otherwise start from 00.
+    let counter = 0;
+    if (currentBuildNumber.startsWith(datePrefix)) {
+      const currentCounter = parseInt(currentBuildNumber.slice(-2), 10);
+      if (!isNaN(currentCounter)) {
+        counter = currentCounter + 1;
+      }
+    }
+
+    const nn = String(counter).padStart(2, '0');
+    const newBuildNumber = `${datePrefix}${nn}`;
+
     content = content.replace(versionRegex, `$1${newBuildNumber}`);
     fs.writeFileSync(pubspecPath, content, 'utf-8');
-    this.logger.log(`Bumped build number to ${newBuildNumber} in pubspec.yaml`);
+    this.logger.log(`Bumped build number from ${currentBuildNumber} to ${newBuildNumber} in pubspec.yaml`);
 
     // Regenerate Generated.xcconfig so FLUTTER_BUILD_NUMBER picks up the new value
     await this.exec(`cd ${workspace} && flutter pub get`);
