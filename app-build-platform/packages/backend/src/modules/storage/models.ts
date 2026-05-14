@@ -10,6 +10,8 @@ export interface BuildTask {
   pgyerAccountType?: string;
   customParams?: Record<string, string>;
   publishTargets?: string[];
+  commitId?: string;
+  bundleId?: string;
   status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
   createdAt: Date;
   startedAt?: Date;

@@ -52,7 +52,7 @@ export class PublishProcessor {
       this.logger.log(`Using publisher: ${publisher.platform}`);
 
       // 获取配置
-      const config = this.getPublishConfig(platform, pgyerAccountType, releaseNotes);
+      const config = await this.getPublishConfig(platform, pgyerAccountType, releaseNotes);
       this.logger.log(`Config prepared for platform: ${platform}`);
 
       // 执行上传
@@ -96,7 +96,7 @@ export class PublishProcessor {
     }
   }
 
-  private getPublishConfig(platform: string, pgyerAccountType?: string, releaseNotes?: string): any {
+  private async getPublishConfig(platform: string, pgyerAccountType?: string, releaseNotes?: string): Promise<any> {
     if (platform === 'pgyer') {
       return {
         apiKey: this.getPgyerApiKey(pgyerAccountType),
@@ -105,7 +105,7 @@ export class PublishProcessor {
 
     if (FASTLANE_PLATFORMS.includes(platform)) {
       // Read credentials from the Settings page (StorageService)
-      const allCreds = this.storageService.listPublishingCredentials();
+      const allCreds = await this.storageService.listPublishingCredentials();
       const cred = allCreds.find((c) => c.platform === platform);
       if (!cred || Object.keys(cred.credentials).length === 0) {
         throw new Error(`No credentials configured for platform: ${platform}`);

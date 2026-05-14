@@ -173,7 +173,7 @@ export class ConfigController {
 
   @Get()
   @ApiOperation({ summary: '获取系统配置', description: '返回 Git、工作空间、SSH 及发布平台配置状态' })
-  getConfig() {
+  async getConfig() {
     // PGYER status — still from env vars
     const pgyerKeys = [
       'PGYER_API_KEY',
@@ -190,7 +190,7 @@ export class ConfigController {
     // Fastlane platforms — from credential storage
     const publishing: Record<string, boolean> = { pgyer: pgyerConfigured };
     for (const platform of Object.keys(PLATFORM_META)) {
-      const cred = this.storageService.getPublishingCredential(platform);
+      const cred = await this.storageService.getPublishingCredential(platform);
       publishing[platform] = !!(cred && cred.enabled && Object.keys(cred.credentials).length > 0);
     }
 
@@ -204,7 +204,7 @@ export class ConfigController {
 
   @Get('env')
   @ApiOperation({ summary: '获取环境变量列表', description: '返回所有系统环境变量及其配置状态' })
-  getEnvList() {
+  async getEnvList() {
     const configs = [
       { key: 'GIT_REPO_URL', label: 'Git 仓库地址', type: 'git', secret: false },
       { key: 'WORKSPACE_DIR', label: '工作目录', type: 'workspace', secret: false },
@@ -220,7 +220,7 @@ export class ConfigController {
 
     // Add fastlane platform credentials from storage
     for (const [platform, meta] of Object.entries(PLATFORM_META)) {
-      const cred = this.storageService.getPublishingCredential(platform);
+      const cred = await this.storageService.getPublishingCredential(platform);
       for (const field of meta.fields) {
         configs.push({
           key: `PUBLISH_${platform.toUpperCase()}_${field.key.toUpperCase()}`,
@@ -231,13 +231,13 @@ export class ConfigController {
       }
     }
 
-    return configs.map((c) => {
+    return await Promise.all(configs.map(async (c) => {
       // For fastlane platform credentials, check storage
       if (c.key.startsWith('PUBLISH_')) {
         const parts = c.key.split('_');
         const platform = parts[1].toLowerCase();
         const fieldKey = parts.slice(2).join('_').toLowerCase();
-        const cred = this.storageService.getPublishingCredential(platform);
+        const cred = await this.storageService.getPublishingCredential(platform);
         const configured = !!(cred?.credentials[fieldKey]);
         return { ...c, configured, value: c.secret && configured ? '******' : (cred?.credentials[fieldKey] || '') };
       }
@@ -249,18 +249,18 @@ export class ConfigController {
         configured: !isPlaceholder,
         value: c.secret ? (isPlaceholder ? '' : '******') : (isPlaceholder ? '' : value),
       };
-    });
+    }));
   }
 
   // ==================== Publishing Credentials ====================
 
   @Get('publishing')
   @ApiOperation({ summary: '获取发布平台配置', description: '返回所有应用商店的凭证配置状态和字段定义' })
-  getPublishingConfig() {
+  async getPublishingConfig() {
     const result: Record<string, any> = {};
 
     for (const [platform, meta] of Object.entries(PLATFORM_META)) {
-      const cred = this.storageService.getPublishingCredential(platform);
+      const cred = await this.storageService.getPublishingCredential(platform);
       result[platform] = {
         label: meta.label,
         platform,
@@ -282,14 +282,14 @@ export class ConfigController {
   @ApiOperation({ summary: '保存发布平台凭证', description: '保存或更新指定应用商店的 API 凭证（密钥字段为空时不覆盖原值）' })
   @ApiParam({ name: 'platform', description: '平台标识', enum: ['appstore', 'appstore_over', 'xiaomi', 'huawei', 'oppo', 'vivo', 'tencent', 'qihu360', 'honor', 'samsung'] })
   @ApiBody({ schema: { type: 'object', properties: { credentials: { type: 'object', description: '凭证键值对' } } } })
-  savePublishingCredential(
+  async savePublishingCredential(
     @Param('platform') platform: string,
     @Body() body: { credentials: Record<string, string> },
   ) {
     const meta = PLATFORM_META[platform];
     if (!meta) throw new NotFoundException(`Unknown platform: ${platform}`);
 
-    const record = this.storageService.savePublishingCredential(platform, body.credentials);
+    const record = await this.storageService.savePublishingCredential(platform, body.credentials);
     return {
       platform: record.platform,
       enabled: record.enabled,
@@ -301,11 +301,11 @@ export class ConfigController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '删除发布平台凭证', description: '清除指定应用商店的所有凭证' })
   @ApiParam({ name: 'platform', description: '平台标识' })
-  deletePublishingCredential(@Param('platform') platform: string) {
+  async deletePublishingCredential(@Param('platform') platform: string) {
     const meta = PLATFORM_META[platform];
     if (!meta) throw new NotFoundException(`Unknown platform: ${platform}`);
 
-    this.storageService.deletePublishingCredential(platform);
+    await this.storageService.deletePublishingCredential(platform);
   }
 
   @Put('publishing/:platform/toggle')
@@ -313,14 +313,14 @@ export class ConfigController {
   @ApiOperation({ summary: '切换发布平台启用状态', description: '启用或禁用指定应用商店的发布功能' })
   @ApiParam({ name: 'platform', description: '平台标识' })
   @ApiBody({ schema: { type: 'object', properties: { enabled: { type: 'boolean' } } } })
-  togglePublishingPlatform(
+  async togglePublishingPlatform(
     @Param('platform') platform: string,
     @Body() body: { enabled: boolean },
   ) {
     const meta = PLATFORM_META[platform];
     if (!meta) throw new NotFoundException(`Unknown platform: ${platform}`);
 
-    const record = this.storageService.togglePublishingPlatform(platform, body.enabled);
+    const record = await this.storageService.togglePublishingPlatform(platform, body.enabled);
     if (!record) throw new NotFoundException(`Platform ${platform} not configured yet`);
     return { platform: record.platform, enabled: record.enabled };
   }
@@ -329,9 +329,9 @@ export class ConfigController {
 
   @Get('store-accounts')
   @ApiOperation({ summary: '获取应用商店账号信息', description: '返回所有应用商店的开发者控制台地址和凭证（Apple 平台不返回凭证）' })
-  getStoreAccounts() {
-    return Object.entries(PLATFORM_META).map(([platform, meta]) => {
-      const cred = this.storageService.getPublishingCredential(platform);
+  async getStoreAccounts() {
+    return await Promise.all(Object.entries(PLATFORM_META).map(async ([platform, meta]) => {
+      const cred = await this.storageService.getPublishingCredential(platform);
       const isApple = APPLE_PLATFORMS.includes(platform);
 
       return {
@@ -348,31 +348,31 @@ export class ConfigController {
               configured: !!cred?.credentials?.[f.key],
             })),
       };
-    });
+    }));
   }
 
   // ==================== Option Groups ====================
 
   @Get('option-groups')
   @ApiOperation({ summary: '获取构建选项组', description: '返回所有可自定义的构建参数选项组' })
-  getOptionGroups() {
-    return this.storageService.listOptionGroups();
+  async getOptionGroups() {
+    return await this.storageService.listOptionGroups();
   }
 
   @Post('option-groups')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: '创建选项组', description: '创建新的构建参数选项组' })
   @ApiBody({ type: CreateOptionGroupDto })
-  createOptionGroup(@Body() dto: CreateOptionGroupDto) {
-    return this.storageService.createOptionGroup(dto);
+  async createOptionGroup(@Body() dto: CreateOptionGroupDto) {
+    return await this.storageService.createOptionGroup(dto);
   }
 
   @Put('option-groups/:id')
   @ApiOperation({ summary: '更新选项组', description: '更新指定选项组的名称或选项值列表' })
   @ApiParam({ name: 'id', description: '选项组 ID' })
   @ApiBody({ type: UpdateOptionGroupDto })
-  updateOptionGroup(@Param('id') id: string, @Body() dto: UpdateOptionGroupDto) {
-    const group = this.storageService.updateOptionGroup(id, dto);
+  async updateOptionGroup(@Param('id') id: string, @Body() dto: UpdateOptionGroupDto) {
+    const group = await this.storageService.updateOptionGroup(id, dto);
     if (!group) throw new NotFoundException(`Option group ${id} not found`);
     return group;
   }
@@ -381,8 +381,8 @@ export class ConfigController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '删除选项组', description: '删除指定的构建参数选项组' })
   @ApiParam({ name: 'id', description: '选项组 ID' })
-  deleteOptionGroup(@Param('id') id: string) {
-    const deleted = this.storageService.deleteOptionGroup(id);
+  async deleteOptionGroup(@Param('id') id: string) {
+    const deleted = await this.storageService.deleteOptionGroup(id);
     if (!deleted) throw new NotFoundException(`Option group ${id} not found`);
   }
 
@@ -391,8 +391,8 @@ export class ConfigController {
   @ApiOperation({ summary: '添加选项值', description: '为指定选项组添加一个新的可选值' })
   @ApiParam({ name: 'id', description: '选项组 ID' })
   @ApiBody({ type: AddOptionValueDto })
-  addOptionValue(@Param('id') id: string, @Body() dto: AddOptionValueDto) {
-    const group = this.storageService.addOptionValue(id, dto);
+  async addOptionValue(@Param('id') id: string, @Body() dto: AddOptionValueDto) {
+    const group = await this.storageService.addOptionValue(id, dto);
     if (!group) throw new NotFoundException(`Option group ${id} not found`);
     return group;
   }
@@ -402,8 +402,8 @@ export class ConfigController {
   @ApiOperation({ summary: '删除选项值', description: '从指定选项组中移除一个可选值' })
   @ApiParam({ name: 'id', description: '选项组 ID' })
   @ApiParam({ name: 'value', description: '选项值' })
-  removeOptionValue(@Param('id') id: string, @Param('value') value: string) {
-    const group = this.storageService.removeOptionValue(id, value);
+  async removeOptionValue(@Param('id') id: string, @Param('value') value: string) {
+    const group = await this.storageService.removeOptionValue(id, value);
     if (!group) throw new NotFoundException(`Option group ${id} not found`);
   }
 }

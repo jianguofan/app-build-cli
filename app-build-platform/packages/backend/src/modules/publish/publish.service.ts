@@ -41,7 +41,7 @@ export class PublishService {
   ): Promise<void> {
     this.logger.log(`Starting publish for build: ${buildId}`);
 
-    const build = this.storageService.getBuild(buildId);
+    const build = await this.storageService.getBuild(buildId);
     if (!build) {
       throw new NotFoundException(`Build ${buildId} not found`);
     }
@@ -58,7 +58,7 @@ export class PublishService {
       return;
     }
 
-    const enabledPlatforms = this.getEnabledFastlanePlatforms();
+    const enabledPlatforms = await this.getEnabledFastlanePlatforms();
 
     for (const platform of targets) {
       // Pgyer uses its own publisher, always allowed
@@ -76,8 +76,8 @@ export class PublishService {
     }
   }
 
-  private getEnabledFastlanePlatforms(): string[] {
-    const certs = this.storageService.listPublishingCredentials();
+  private async getEnabledFastlanePlatforms(): Promise<string[]> {
+    const certs = await this.storageService.listPublishingCredentials();
     return FASTLANE_PLATFORMS.filter((p) => {
       const cred = certs.find((c) => c.platform === p);
       return cred && cred.enabled && Object.keys(cred.credentials).length > 0;
@@ -99,7 +99,7 @@ export class PublishService {
       publishedAt: undefined,
     };
 
-    this.storageService.createPublish(record);
+    await this.storageService.createPublish(record);
 
     // 加入发布队列
     await this.publishQueue.add(
@@ -129,7 +129,7 @@ export class PublishService {
   }
 
   async getPublishes(buildId: string): Promise<PublishRecord[]> {
-    return this.storageService.getPublishes(buildId);
+    return await this.storageService.getPublishes(buildId);
   }
 
   async getAllPublishes(filters?: {
@@ -142,7 +142,7 @@ export class PublishService {
     const limit = filters?.limit || 20;
     const offset = (page - 1) * limit;
 
-    const result = this.storageService.listAllPublishes({
+    const result = await this.storageService.listAllPublishes({
       platform: filters?.platform,
       status: filters?.status,
       limit,
@@ -172,11 +172,11 @@ export class PublishService {
       updateData.publishedAt = new Date();
     }
 
-    this.storageService.updatePublish(recordId, updateData);
+    await this.storageService.updatePublish(recordId, updateData);
     this.logger.log(`Updated publish record ${recordId} status to ${status}`);
 
     // Get the updated record and emit via WebSocket
-    const record = this.storageService.getPublishById(recordId);
+    const record = await this.storageService.getPublishById(recordId);
     if (record && this.publishGateway) {
       this.publishGateway.emitPublishStatus(record.buildId, record);
     }
@@ -205,7 +205,7 @@ export class PublishService {
   async republish(buildId: string, platforms: string[]): Promise<void> {
     this.logger.log(`Republishing build ${buildId} to platforms: ${platforms.join(', ')}`);
 
-    const build = this.storageService.getBuild(buildId);
+    const build = await this.storageService.getBuild(buildId);
     if (!build) {
       throw new NotFoundException(`Build ${buildId} not found`);
     }
@@ -219,7 +219,7 @@ export class PublishService {
       throw new Error(`No artifact found for build ${buildId}`);
     }
 
-    const enabledPlatforms = this.getEnabledFastlanePlatforms();
+    const enabledPlatforms = await this.getEnabledFastlanePlatforms();
 
     for (const platform of platforms) {
       // Pgyer uses its own publisher, always allowed
@@ -240,7 +240,7 @@ export class PublishService {
   async directUpload(buildId: string, platform: string): Promise<void> {
     this.logger.log(`Direct upload build ${buildId} to platform: ${platform}`);
 
-    const build = this.storageService.getBuild(buildId);
+    const build = await this.storageService.getBuild(buildId);
     if (!build) {
       throw new NotFoundException(`Build ${buildId} not found`);
     }
@@ -266,7 +266,7 @@ export class PublishService {
     this.logger.log(`Retrying publish record: ${publishId}`);
 
     // Find all publishes to locate the one to retry
-    const allPublishes = this.storageService.listAllPublishes({});
+    const allPublishes = await this.storageService.listAllPublishes({});
     const record = allPublishes.data.find((p) => p.id === publishId);
     if (!record) {
       throw new NotFoundException(`Publish record ${publishId} not found`);
@@ -276,7 +276,7 @@ export class PublishService {
       throw new Error(`Publish record ${publishId} is not in failed status`);
     }
 
-    const build = this.storageService.getBuild(record.buildId);
+    const build = await this.storageService.getBuild(record.buildId);
     if (!build) {
       throw new NotFoundException(`Build ${record.buildId} not found for publish record`);
     }

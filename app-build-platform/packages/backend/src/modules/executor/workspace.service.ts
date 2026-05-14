@@ -170,6 +170,39 @@ export class WorkspaceService {
     return '';
   }
 
+  async getCommitHash(workspace: string): Promise<string> {
+    try {
+      const hash = await this.exec(`cd ${workspace} && git rev-parse HEAD`);
+      return hash.trim();
+    } catch (error: any) {
+      this.logger.warn(`Failed to get commit hash: ${error.message}`);
+      return '';
+    }
+  }
+
+  async getBundleId(workspace: string, platform: string): Promise<string> {
+    try {
+      if (platform === 'android') {
+        const buildGradlePath = path.join(workspace, 'android', 'app', 'build.gradle');
+        if (fs.existsSync(buildGradlePath)) {
+          const content = fs.readFileSync(buildGradlePath, 'utf-8');
+          const match = content.match(/applicationId\s+["']([^"']+)["']/);
+          if (match) return match[1];
+        }
+      } else if (platform === 'ios') {
+        const pbxprojPath = path.join(workspace, 'ios', 'Runner.xcodeproj', 'project.pbxproj');
+        if (fs.existsSync(pbxprojPath)) {
+          const content = fs.readFileSync(pbxprojPath, 'utf-8');
+          const match = content.match(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*["']?([^"';]+)["']?/);
+          if (match) return match[1].trim();
+        }
+      }
+    } catch (error: any) {
+      this.logger.warn(`Failed to extract bundleId: ${error.message}`);
+    }
+    return '';
+  }
+
   async cleanup(workspace: string): Promise<void> {
     try {
       await this.exec(`cd ${workspace} && git checkout -- .`);

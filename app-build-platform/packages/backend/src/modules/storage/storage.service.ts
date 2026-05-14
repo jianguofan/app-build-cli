@@ -1,187 +1,192 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { Repository, FindOptionsWhere } from 'typeorm';
 import { BuildTask, BuildOptionGroup, BuildOptionValue, PublishRecord, PublishingCredential } from './models';
+import {
+  BuildTaskEntity,
+  PublishRecordEntity,
+  BuildOptionGroupEntity,
+  PublishingCredentialEntity,
+} from './entities';
 import { v4 as uuidv4 } from 'uuid';
-import * as fs from 'fs';
-import * as path from 'path';
 
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
-  private builds: Map<string, BuildTask> = new Map();
-  private publishes: Map<string, PublishRecord[]> = new Map();
-  private optionGroups: Map<string, BuildOptionGroup> = new Map();
-  private publishingCredentials: Map<string, PublishingCredential> = new Map();
-  private credentialsPath: string;
 
-  constructor(private configService: ConfigService) {
-    const workspaceDir = configService.get<string>('WORKSPACE_DIR') || process.cwd();
-    this.credentialsPath = path.join(workspaceDir, 'publishing-credentials.json');
+  constructor(
+    @InjectRepository(BuildTaskEntity)
+    private buildRepo: Repository<BuildTaskEntity>,
+    @InjectRepository(PublishRecordEntity)
+    private publishRepo: Repository<PublishRecordEntity>,
+    @InjectRepository(BuildOptionGroupEntity)
+    private optionGroupRepo: Repository<BuildOptionGroupEntity>,
+    @InjectRepository(PublishingCredentialEntity)
+    private credentialRepo: Repository<PublishingCredentialEntity>,
+    private configService: ConfigService,
+  ) {}
+
+  async onModuleInit() {
+    await this.initializeOptionDefaults();
+    await this.migrateCredentialsFromFile();
   }
 
-  onModuleInit() {
-    this.initializeOptionDefaults();
-    this.loadCredentials();
-  }
+  private async migrateCredentialsFromFile(): Promise<void> {
+    const count = await this.credentialRepo.count();
+    if (count > 0) return; // Already has data, skip migration
 
-  // ==================== Credential persistence ====================
+    const path = require('path');
+    const fs = require('fs');
+    const workspaceDir = this.configService.get<string>('WORKSPACE_DIR') || process.cwd();
+    const credentialsPath = path.join(workspaceDir, 'publishing-credentials.json');
 
-  private loadCredentials(): void {
     try {
-      if (fs.existsSync(this.credentialsPath)) {
-        const raw = fs.readFileSync(this.credentialsPath, 'utf-8');
+      if (fs.existsSync(credentialsPath)) {
+        const raw = fs.readFileSync(credentialsPath, 'utf-8');
         const list: PublishingCredential[] = JSON.parse(raw);
         for (const cred of list) {
           cred.updatedAt = new Date(cred.updatedAt);
-          this.publishingCredentials.set(cred.platform, cred);
+          await this.credentialRepo.save(this.toCredentialEntity(cred));
         }
-        this.logger.log(`Loaded ${list.length} publishing credentials from ${this.credentialsPath}`);
+        this.logger.log(`Migrated ${list.length} publishing credentials from ${credentialsPath}`);
       }
     } catch (err: any) {
-      this.logger.warn(`Failed to load publishing credentials: ${err.message}`);
-    }
-  }
-
-  private persistCredentials(): void {
-    try {
-      const dir = path.dirname(this.credentialsPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const list = Array.from(this.publishingCredentials.values());
-      fs.writeFileSync(this.credentialsPath, JSON.stringify(list, null, 2), 'utf-8');
-    } catch (err: any) {
-      this.logger.error(`Failed to persist publishing credentials: ${err.message}`);
+      this.logger.warn(`Failed to migrate credentials from file: ${err.message}`);
     }
   }
 
   // ==================== Build Tasks ====================
 
   createBuild(task: BuildTask): void {
-    this.builds.set(task.id, task);
+    this.buildRepo.save(this.toBuildEntity(task)).catch((err) => {
+      this.logger.error(`Failed to save build task: ${err.message}`);
+    });
     this.logger.log(`Created build task: ${task.id}`);
   }
 
-  getBuild(id: string): BuildTask | undefined {
-    return this.builds.get(id);
+  async getBuild(id: string): Promise<BuildTask | undefined> {
+    const entity = await this.buildRepo.findOneBy({ id });
+    return entity ? this.toBuildModel(entity) : undefined;
   }
 
-  updateBuild(id: string, updates: Partial<BuildTask>): void {
-    const task = this.builds.get(id);
-    if (task) {
-      Object.assign(task, updates);
-      this.builds.set(id, task);
-      this.logger.log(`Updated build task: ${id}`);
-    }
+  async updateBuild(id: string, updates: Partial<BuildTask>): Promise<void> {
+    await this.buildRepo.update(id, this.toBuildEntity(updates));
+    this.logger.log(`Updated build task: ${id}`);
   }
 
-  listBuilds(filters?: {
+  async listBuilds(filters?: {
     status?: string;
     platform?: string;
     limit?: number;
     offset?: number;
-  }): { data: BuildTask[]; total: number } {
-    let tasks = Array.from(this.builds.values());
+  }): Promise<{ data: BuildTask[]; total: number }> {
+    const where: FindOptionsWhere<BuildTaskEntity> = {};
+    if (filters?.status) where.status = filters.status;
+    if (filters?.platform) where.platform = filters.platform;
 
-    if (filters?.status) {
-      tasks = tasks.filter((t) => t.status === filters.status);
-    }
-    if (filters?.platform) {
-      tasks = tasks.filter((t) => t.platform === filters.platform);
-    }
+    const [entities, total] = await this.buildRepo.findAndCount({
+      where,
+      order: { createdAt: 'DESC' },
+      take: filters?.limit,
+      skip: filters?.offset,
+    });
 
-    tasks.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-    const total = tasks.length;
-
-    if (filters?.limit) {
-      const offset = filters.offset || 0;
-      tasks = tasks.slice(offset, offset + filters.limit);
-    }
-
-    return { data: tasks, total };
+    return { data: entities.map((e) => this.toBuildModel(e)), total };
   }
 
-  deleteBuild(id: string): boolean {
-    const deleted = this.builds.delete(id);
-    if (deleted) {
-      this.logger.log(`Deleted build task: ${id}`);
+  async findMatchingBuild(filters: {
+    platform: string;
+    flavor: string;
+    buildMode: string;
+    env: string;
+    commitId: string;
+    bundleId: string;
+  }): Promise<BuildTask | undefined> {
+    const entity = await this.buildRepo.findOne({
+      where: {
+        status: 'success',
+        platform: filters.platform,
+        flavor: filters.flavor,
+        buildMode: filters.buildMode,
+        env: filters.env,
+        commitId: filters.commitId,
+        bundleId: filters.bundleId,
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (entity && entity.artifacts && (entity.artifacts.ipa || entity.artifacts.apk)) {
+      return this.toBuildModel(entity);
     }
-    return deleted;
+    return undefined;
+  }
+
+  async deleteBuild(id: string): Promise<boolean> {
+    const result = await this.buildRepo.delete(id);
+    if (result.affected && result.affected > 0) {
+      this.logger.log(`Deleted build task: ${id}`);
+      return true;
+    }
+    return false;
   }
 
   // ==================== Publish Records ====================
 
   createPublish(record: PublishRecord): void {
-    const records = this.publishes.get(record.buildId) || [];
-    records.push(record);
-    this.publishes.set(record.buildId, records);
+    this.publishRepo.save(this.toPublishEntity(record)).catch((err) => {
+      this.logger.error(`Failed to save publish record: ${err.message}`);
+    });
     this.logger.log(`Created publish record: ${record.id} for build: ${record.buildId}`);
   }
 
-  getPublishes(buildId: string): PublishRecord[] {
-    return this.publishes.get(buildId) || [];
+  async getPublishes(buildId: string): Promise<PublishRecord[]> {
+    const entities = await this.publishRepo.find({
+      where: { buildId },
+      order: { publishedAt: 'DESC' },
+    });
+    return entities.map((e) => this.toPublishModel(e));
   }
 
-  getPublishById(id: string): PublishRecord | undefined {
-    for (const records of this.publishes.values()) {
-      const record = records.find((r) => r.id === id);
-      if (record) {
-        return record;
-      }
-    }
-    return undefined;
+  async getPublishById(id: string): Promise<PublishRecord | undefined> {
+    const entity = await this.publishRepo.findOneBy({ id });
+    return entity ? this.toPublishModel(entity) : undefined;
   }
 
-  updatePublish(id: string, updates: Partial<PublishRecord>): void {
-    for (const [buildId, records] of this.publishes.entries()) {
-      const record = records.find((r) => r.id === id);
-      if (record) {
-        Object.assign(record, updates);
-        this.publishes.set(buildId, records);
-        this.logger.log(`Updated publish record: ${id}`);
-        return;
-      }
-    }
+  async updatePublish(id: string, updates: Partial<PublishRecord>): Promise<void> {
+    await this.publishRepo.update(id, this.toPublishEntity(updates));
+    this.logger.log(`Updated publish record: ${id}`);
   }
 
-  listAllPublishes(filters?: {
+  async listAllPublishes(filters?: {
     platform?: string;
     status?: string;
     limit?: number;
     offset?: number;
-  }): { data: PublishRecord[]; total: number } {
-    let records: PublishRecord[] = [];
-    for (const publishList of this.publishes.values()) {
-      records.push(...publishList);
-    }
+  }): Promise<{ data: PublishRecord[]; total: number }> {
+    const where: FindOptionsWhere<PublishRecordEntity> = {};
+    if (filters?.platform) where.platform = filters.platform;
+    if (filters?.status) where.status = filters.status;
 
-    if (filters?.platform) {
-      records = records.filter((r) => r.platform === filters.platform);
-    }
-    if (filters?.status) {
-      records = records.filter((r) => r.status === filters.status);
-    }
-
-    records.sort((a, b) => {
-      const timeA = a.publishedAt?.getTime() || 0;
-      const timeB = b.publishedAt?.getTime() || 0;
-      return timeB - timeA;
+    const [entities, total] = await this.publishRepo.findAndCount({
+      where,
+      order: { publishedAt: 'DESC' },
+      take: filters?.limit,
+      skip: filters?.offset,
     });
 
-    const total = records.length;
-
-    if (filters?.limit) {
-      const offset = filters.offset || 0;
-      records = records.slice(offset, offset + filters.limit);
-    }
-
-    return { data: records, total };
+    return { data: entities.map((e) => this.toPublishModel(e)), total };
   }
 
   // ==================== Option Groups ====================
 
-  private initializeOptionDefaults(): void {
+  private async initializeOptionDefaults(): Promise<void> {
+    const count = await this.optionGroupRepo.count();
+    if (count > 0) {
+      this.logger.log(`Option groups already initialized (${count} rows)`);
+      return;
+    }
+
     const now = new Date();
     const defaults: BuildOptionGroup[] = [
       {
@@ -235,31 +240,35 @@ export class StorageService {
         required: false, isStandard: true, createdAt: now, updatedAt: now,
       },
     ];
-    defaults.forEach((g) => this.optionGroups.set(g.id, g));
-    this.logger.log(`Initialized ${defaults.length} default option groups`);
+
+    const entities = defaults.map((g) => this.toOptionGroupEntity(g));
+    await this.optionGroupRepo.save(entities);
+    this.logger.log(`Initialized ${entities.length} default option groups`);
   }
 
-  listOptionGroups(): BuildOptionGroup[] {
-    return Array.from(this.optionGroups.values()).sort(
-      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
-    );
+  async listOptionGroups(): Promise<BuildOptionGroup[]> {
+    const entities = await this.optionGroupRepo.find({ order: { createdAt: 'ASC' } });
+    return entities.map((e) => this.toOptionGroupModel(e));
   }
 
-  getOptionGroup(id: string): BuildOptionGroup | undefined {
-    return this.optionGroups.get(id);
+  async getOptionGroup(id: string): Promise<BuildOptionGroup | undefined> {
+    const entity = await this.optionGroupRepo.findOneBy({ id });
+    return entity ? this.toOptionGroupModel(entity) : undefined;
   }
 
-  getOptionGroupByKey(key: string): BuildOptionGroup | undefined {
-    return this.listOptionGroups().find((g) => g.key === key);
+  async getOptionGroupByKey(key: string): Promise<BuildOptionGroup | undefined> {
+    const entity = await this.optionGroupRepo.findOneBy({ key });
+    return entity ? this.toOptionGroupModel(entity) : undefined;
   }
 
-  createOptionGroup(data: {
+  async createOptionGroup(data: {
     key: string;
     label: string;
     values?: BuildOptionValue[];
     required?: boolean;
-  }): BuildOptionGroup {
-    if (this.getOptionGroupByKey(data.key)) {
+  }): Promise<BuildOptionGroup> {
+    const existing = await this.getOptionGroupByKey(data.key);
+    if (existing) {
       throw new BadRequestException(`Option group key "${data.key}" already exists`);
     }
 
@@ -274,82 +283,81 @@ export class StorageService {
       updatedAt: new Date(),
     };
 
-    this.optionGroups.set(group.id, group);
+    await this.optionGroupRepo.save(this.toOptionGroupEntity(group));
     this.logger.log(`Created option group: ${group.key}`);
     return group;
   }
 
-  updateOptionGroup(
+  async updateOptionGroup(
     id: string,
     updates: Partial<Pick<BuildOptionGroup, 'label' | 'values' | 'required'>>,
-  ): BuildOptionGroup | undefined {
-    const group = this.optionGroups.get(id);
-    if (!group) return undefined;
+  ): Promise<BuildOptionGroup | undefined> {
+    const entity = await this.optionGroupRepo.findOneBy({ id });
+    if (!entity) return undefined;
 
-    if (updates.label !== undefined) group.label = updates.label;
-    if (updates.values !== undefined) group.values = updates.values;
-    if (updates.required !== undefined) group.required = updates.required;
-    group.updatedAt = new Date();
+    if (updates.label !== undefined) entity.label = updates.label;
+    if (updates.values !== undefined) entity.values = updates.values;
+    if (updates.required !== undefined) entity.required = updates.required;
+    entity.updatedAt = new Date();
 
-    this.optionGroups.set(id, group);
-    this.logger.log(`Updated option group: ${group.key}`);
-    return group;
+    await this.optionGroupRepo.save(entity);
+    this.logger.log(`Updated option group: ${entity.key}`);
+    return this.toOptionGroupModel(entity);
   }
 
-  deleteOptionGroup(id: string): boolean {
-    const group = this.optionGroups.get(id);
-    if (!group) return false;
-    if (group.isStandard) {
+  async deleteOptionGroup(id: string): Promise<boolean> {
+    const entity = await this.optionGroupRepo.findOneBy({ id });
+    if (!entity) return false;
+    if (entity.isStandard) {
       throw new BadRequestException('Cannot delete standard option group');
     }
-    const deleted = this.optionGroups.delete(id);
-    if (deleted) this.logger.log(`Deleted option group: ${group.key}`);
-    return deleted;
+    await this.optionGroupRepo.delete(id);
+    this.logger.log(`Deleted option group: ${entity.key}`);
+    return true;
   }
 
-  addOptionValue(groupId: string, value: BuildOptionValue): BuildOptionGroup | undefined {
-    const group = this.optionGroups.get(groupId);
-    if (!group) return undefined;
+  async addOptionValue(groupId: string, value: BuildOptionValue): Promise<BuildOptionGroup | undefined> {
+    const entity = await this.optionGroupRepo.findOneBy({ id: groupId });
+    if (!entity) return undefined;
 
-    if (group.values.some((v) => v.value === value.value)) {
-      throw new BadRequestException(`Value "${value.value}" already exists in group "${group.key}"`);
+    if (entity.values.some((v) => v.value === value.value)) {
+      throw new BadRequestException(`Value "${value.value}" already exists in group "${entity.key}"`);
     }
 
-    group.values.push(value);
-    group.updatedAt = new Date();
-    this.optionGroups.set(groupId, group);
-    this.logger.log(`Added value "${value.value}" to group "${group.key}"`);
-    return group;
+    entity.values.push(value);
+    entity.updatedAt = new Date();
+    await this.optionGroupRepo.save(entity);
+    this.logger.log(`Added value "${value.value}" to group "${entity.key}"`);
+    return this.toOptionGroupModel(entity);
   }
 
-  removeOptionValue(groupId: string, value: string): BuildOptionGroup | undefined {
-    const group = this.optionGroups.get(groupId);
-    if (!group) return undefined;
+  async removeOptionValue(groupId: string, value: string): Promise<BuildOptionGroup | undefined> {
+    const entity = await this.optionGroupRepo.findOneBy({ id: groupId });
+    if (!entity) return undefined;
 
-    group.values = group.values.filter((v) => v.value !== value);
-    group.updatedAt = new Date();
-    this.optionGroups.set(groupId, group);
-    this.logger.log(`Removed value "${value}" from group "${group.key}"`);
-    return group;
+    entity.values = entity.values.filter((v) => v.value !== value);
+    entity.updatedAt = new Date();
+    await this.optionGroupRepo.save(entity);
+    this.logger.log(`Removed value "${value}" from group "${entity.key}"`);
+    return this.toOptionGroupModel(entity);
   }
 
   // ==================== Publishing Credentials ====================
 
-  listPublishingCredentials(): PublishingCredential[] {
-    return Array.from(this.publishingCredentials.values());
+  async listPublishingCredentials(): Promise<PublishingCredential[]> {
+    const entities = await this.credentialRepo.find();
+    return entities.map((e) => this.toCredentialModel(e));
   }
 
-  getPublishingCredential(platform: string): PublishingCredential | undefined {
-    return this.publishingCredentials.get(platform);
+  async getPublishingCredential(platform: string): Promise<PublishingCredential | undefined> {
+    const entity = await this.credentialRepo.findOneBy({ platform });
+    return entity ? this.toCredentialModel(entity) : undefined;
   }
 
-  savePublishingCredential(platform: string, credentials: Record<string, string>): PublishingCredential {
-    const existing = this.publishingCredentials.get(platform);
-    const merged = existing
-      ? { ...existing.credentials }
-      : {};
+  async savePublishingCredential(platform: string, credentials: Record<string, string>): Promise<PublishingCredential> {
+    const existing = await this.credentialRepo.findOneBy({ platform });
+    const merged = existing?.credentials ? { ...existing.credentials } : {};
 
-    // Merge: non-empty values overwrite, empty values keep existing
     for (const [key, value] of Object.entries(credentials)) {
       if (value !== undefined && value !== '') {
         merged[key] = value;
@@ -363,54 +371,178 @@ export class StorageService {
       updatedAt: new Date(),
     };
 
-    this.publishingCredentials.set(platform, record);
-    this.persistCredentials();
+    await this.credentialRepo.save(this.toCredentialEntity(record));
     this.logger.log(`Saved publishing credential for platform: ${platform}`);
     return record;
   }
 
-  deletePublishingCredential(platform: string): boolean {
-    const deleted = this.publishingCredentials.delete(platform);
-    if (deleted) {
-      this.persistCredentials();
+  async deletePublishingCredential(platform: string): Promise<boolean> {
+    const result = await this.credentialRepo.delete(platform);
+    if (result.affected && result.affected > 0) {
       this.logger.log(`Deleted publishing credential for platform: ${platform}`);
+      return true;
     }
-    return deleted;
+    return false;
   }
 
-  togglePublishingPlatform(platform: string, enabled: boolean): PublishingCredential | undefined {
-    const existing = this.publishingCredentials.get(platform);
-    if (!existing) return undefined;
+  async togglePublishingPlatform(platform: string, enabled: boolean): Promise<PublishingCredential | undefined> {
+    const entity = await this.credentialRepo.findOneBy({ platform });
+    if (!entity) return undefined;
 
-    existing.enabled = enabled;
-    existing.updatedAt = new Date();
-    this.publishingCredentials.set(platform, existing);
-    this.persistCredentials();
+    entity.enabled = enabled;
+    entity.updatedAt = new Date();
+    await this.credentialRepo.save(entity);
     this.logger.log(`Toggled platform ${platform} to ${enabled ? 'enabled' : 'disabled'}`);
-    return existing;
+    return this.toCredentialModel(entity);
   }
 
   // ==================== Statistics ====================
 
-  getStats() {
-    const builds = Array.from(this.builds.values());
-    const total = builds.length;
-    const success = builds.filter((b) => b.status === 'success').length;
-    const running = builds.filter((b) => b.status === 'running').length;
+  async getStats() {
+    const total = await this.buildRepo.count();
+    const success = await this.buildRepo.count({ where: { status: 'success' } });
+    const running = await this.buildRepo.count({ where: { status: 'running' } });
 
     const successRate = total > 0 ? (success / total) * 100 : 0;
 
-    const successBuilds = builds.filter((b) => b.status === 'success' && b.duration);
-    const avgDuration =
-      successBuilds.length > 0
-        ? successBuilds.reduce((sum, b) => sum + (b.duration || 0), 0) / successBuilds.length
-        : 0;
+    const successBuilds = await this.buildRepo.find({
+      where: { status: 'success' },
+      select: ['duration'],
+    });
+    const durations = successBuilds.filter((b) => b.duration != null).map((b) => b.duration);
+    const avgDuration = durations.length > 0
+      ? durations.reduce((sum, d) => sum + d, 0) / durations.length
+      : 0;
 
     return {
       totalBuilds: total,
       successRate: parseFloat(successRate.toFixed(2)),
       runningBuilds: running,
       avgDuration: Math.round(avgDuration),
+    };
+  }
+
+  // ==================== Entity ↔ Model mappers ====================
+
+  private toBuildEntity(task: Partial<BuildTask>): any {
+    const entity: any = {};
+    if (task.id !== undefined) entity.id = task.id;
+    if (task.platform !== undefined) entity.platform = task.platform;
+    if (task.flavor !== undefined) entity.flavor = task.flavor;
+    if (task.buildMode !== undefined) entity.buildMode = task.buildMode;
+    if (task.env !== undefined) entity.env = task.env;
+    if (task.branch !== undefined) entity.branch = task.branch;
+    if (task.language !== undefined) entity.language = task.language;
+    if (task.region !== undefined) entity.region = task.region;
+    if (task.pgyerAccountType !== undefined) entity.pgyerAccountType = task.pgyerAccountType;
+    if (task.customParams !== undefined) entity.customParams = task.customParams;
+    if (task.publishTargets !== undefined) entity.publishTargets = task.publishTargets;
+    if (task.commitId !== undefined) entity.commitId = task.commitId;
+    if (task.bundleId !== undefined) entity.bundleId = task.bundleId;
+    if (task.status !== undefined) entity.status = task.status;
+    if (task.artifacts !== undefined) entity.artifacts = task.artifacts;
+    if (task.logFile !== undefined) entity.logFile = task.logFile;
+    if (task.error !== undefined) entity.error = task.error;
+    if (task.createdAt !== undefined) entity.createdAt = task.createdAt;
+    if (task.startedAt !== undefined) entity.startedAt = task.startedAt;
+    if (task.completedAt !== undefined) entity.completedAt = task.completedAt;
+    if (task.duration !== undefined) entity.duration = task.duration;
+    return entity;
+  }
+
+  private toBuildModel(entity: BuildTaskEntity): BuildTask {
+    return {
+      id: entity.id,
+      platform: entity.platform,
+      flavor: entity.flavor,
+      buildMode: entity.buildMode,
+      env: entity.env,
+      branch: entity.branch,
+      language: entity.language,
+      region: entity.region,
+      pgyerAccountType: entity.pgyerAccountType,
+      customParams: entity.customParams,
+      publishTargets: entity.publishTargets,
+      commitId: entity.commitId,
+      bundleId: entity.bundleId,
+      status: entity.status as BuildTask['status'],
+      artifacts: entity.artifacts,
+      logFile: entity.logFile,
+      error: entity.error,
+      createdAt: entity.createdAt,
+      startedAt: entity.startedAt,
+      completedAt: entity.completedAt,
+      duration: entity.duration,
+    };
+  }
+
+  private toPublishEntity(record: Partial<PublishRecord>): any {
+    const entity: any = {};
+    if (record.id !== undefined) entity.id = record.id;
+    if (record.buildId !== undefined) entity.buildId = record.buildId;
+    if (record.platform !== undefined) entity.platform = record.platform;
+    if (record.status !== undefined) entity.status = record.status;
+    if (record.downloadUrl !== undefined) entity.downloadUrl = record.downloadUrl;
+    if (record.reviewUrl !== undefined) entity.reviewUrl = record.reviewUrl;
+    if (record.error !== undefined) entity.error = record.error;
+    if (record.publishedAt !== undefined) entity.publishedAt = record.publishedAt;
+    return entity;
+  }
+
+  private toPublishModel(entity: PublishRecordEntity): PublishRecord {
+    return {
+      id: entity.id,
+      buildId: entity.buildId,
+      platform: entity.platform,
+      status: entity.status as PublishRecord['status'],
+      downloadUrl: entity.downloadUrl,
+      reviewUrl: entity.reviewUrl,
+      error: entity.error,
+      publishedAt: entity.publishedAt,
+    };
+  }
+
+  private toOptionGroupEntity(group: BuildOptionGroup): BuildOptionGroupEntity {
+    return {
+      id: group.id,
+      key: group.key,
+      label: group.label,
+      values: group.values,
+      required: group.required,
+      isStandard: group.isStandard,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+  }
+
+  private toOptionGroupModel(entity: BuildOptionGroupEntity): BuildOptionGroup {
+    return {
+      id: entity.id,
+      key: entity.key,
+      label: entity.label,
+      values: entity.values,
+      required: entity.required,
+      isStandard: entity.isStandard,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    };
+  }
+
+  private toCredentialEntity(cred: PublishingCredential): PublishingCredentialEntity {
+    return {
+      platform: cred.platform,
+      enabled: cred.enabled,
+      credentials: cred.credentials,
+      updatedAt: cred.updatedAt,
+    };
+  }
+
+  private toCredentialModel(entity: PublishingCredentialEntity): PublishingCredential {
+    return {
+      platform: entity.platform,
+      enabled: entity.enabled,
+      credentials: entity.credentials,
+      updatedAt: entity.updatedAt,
     };
   }
 }
