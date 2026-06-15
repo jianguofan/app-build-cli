@@ -6,7 +6,7 @@
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}/app-build-platform/packages/backend",
-      "runtimeExecutable": "node",
+      "runtimeVersion": "22",
       "runtimeArgs": [
         "--require", "ts-node/register",
         "--require", "tsconfig-paths/register"
@@ -66,7 +66,7 @@
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}/app-build-platform/packages/backend",
-      "runtimeExecutable": "node",
+      "runtimeVersion": "22",
       "runtimeArgs": [
         "--require", "ts-node/register",
         "--require", "tsconfig-paths/register",
@@ -88,7 +88,7 @@
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}/app-build-platform/packages/backend",
-      "runtimeExecutable": "node",
+      "runtimeVersion": "22",
       "runtimeArgs": [
         "--require", "ts-node/register",
         "--require", "tsconfig-paths/register",
@@ -110,7 +110,7 @@
       "request": "launch",
       "cwd": "${workspaceFolder}/app-build-platform/packages/backend",
       "preLaunchTask": "start-frontend",
-      "runtimeExecutable": "node",
+      "runtimeVersion": "22",
       "runtimeArgs": [
         "--require", "ts-node/register",
         "--require", "tsconfig-paths/register"

@@ -1,6 +1,6 @@
 # Build outputs
 dist/
-build/
+/build/
 
 # Dependencies
 node_modules/

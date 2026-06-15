@@ -13,6 +13,7 @@ import {
   Modal,
   Checkbox,
   Popconfirm,
+  Select,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -69,6 +70,8 @@ const BuildDetail: React.FC = () => {
   const [availablePlatforms, setAvailablePlatforms] = useState<PublishPlatform[]>([]);
   const [republishing, setRepublishing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [selectedBuildId, setSelectedBuildId] = useState<string>('');
+  const [successfulBuilds, setSuccessfulBuilds] = useState<{ id: string; platform: string; flavor: string; env: string; buildMode: string; createdAt: string }[]>([]);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -180,7 +183,16 @@ const BuildDetail: React.FC = () => {
     setRepublishModalVisible(true);
   };
 
-  const handleDirectUpload = () => {
+  const handleDirectUpload = async () => {
+    // Fetch successful builds with artifacts for selection
+    try {
+      const res = await api.get('/builds', { params: { status: 'success', limit: 50 } });
+      const builds = (res.data.data || []).filter((b: any) => b.artifacts && (b.artifacts.ipa || b.artifacts.apk));
+      setSuccessfulBuilds(builds);
+      setSelectedBuildId(id || '');
+    } catch {
+      setSuccessfulBuilds([]);
+    }
     setSelectedUploadPlatforms([]);
     setUploadModalVisible(true);
   };
@@ -205,11 +217,12 @@ const BuildDetail: React.FC = () => {
 
     setUploading(true);
     const errors: string[] = [];
+    const uploadBuildId = selectedBuildId || id;
 
     try {
       for (const platform of selectedUploadPlatforms) {
         try {
-          await api.post(`/publishes/upload/${id}/${platform}`);
+          await api.post(`/publishes/upload/${uploadBuildId}/${platform}`);
           message.success(`${platform} 上传任务已创建`);
         } catch (err: any) {
           const errorMsg = err.response?.data?.message || '上传失败';
@@ -536,6 +549,21 @@ const BuildDetail: React.FC = () => {
           <Text type="warning">
             ⚠️ 此功能跳过构建状态检查，直接上传产物到指定平台，仅用于调试。
           </Text>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <Text>选择构建包：</Text>
+          <Select
+            style={{ width: '100%', marginTop: 8 }}
+            value={selectedBuildId}
+            onChange={(value) => setSelectedBuildId(value)}
+            placeholder="请选择要上传的构建包"
+          >
+            {successfulBuilds.map((build) => (
+              <Select.Option key={build.id} value={build.id}>
+                {build.platform === 'ios' ? 'iOS' : 'Android'} - {build.flavor} - {build.env.toUpperCase()} - {build.buildMode} - {new Date(build.createdAt).toLocaleString('zh-CN')}
+              </Select.Option>
+            ))}
+          </Select>
         </div>
         <div style={{ marginBottom: 16 }}>
           <Text>选择要上传的平台：</Text>

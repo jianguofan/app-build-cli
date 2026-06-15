@@ -49,6 +49,47 @@ export class ExecutorService {
     return process.env.SHELL || '/bin/zsh';
   }
 
+  /**
+   * Build the environment for spawned build processes.
+   *
+   * The NestJS process may have been started from a context where RVM is not in
+   * PATH (e.g. from an IDE, or nvm took precedence). But RVM env vars (GEM_HOME,
+   * MY_RUBY_HOME, rvm_path) are still set. We need to ensure RVM's ruby and gem
+   * bin directories are in PATH so that CocoaPods (pod) is found correctly.
+   * Without this, Flutter's CocoaPods check runs `pod --version` with system
+   * Ruby 2.6 (which has no cocoapods gem) and fails with "broken install".
+   */
+  private buildSpawnEnv(): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+
+    // Collect RVM bin directories from existing env vars
+    const rvmDirs = new Set<string>();
+    if (env.GEM_HOME) {
+      rvmDirs.add(`${env.GEM_HOME}/bin`);
+    }
+    if (env.MY_RUBY_HOME) {
+      rvmDirs.add(`${env.MY_RUBY_HOME}/bin`);
+    }
+    // Also check rvm_path for global gem bin
+    if (env.rvm_path) {
+      // ruby-3.3.0@global gems (fallback gems)
+      const rubyVer = env.MY_RUBY_HOME?.split('/').pop() || '';
+      if (rubyVer) {
+        rvmDirs.add(`${env.rvm_path}/gems/${rubyVer}@global/bin`);
+      }
+      rvmDirs.add(`${env.rvm_path}/bin`);
+    }
+
+    // Prepend RVM directories to PATH if they aren't already there
+    const currentPath = env.PATH || '';
+    const missingDirs = [...rvmDirs].filter((dir) => !currentPath.startsWith(dir) && !currentPath.includes(`:${dir}:`) && !currentPath.includes(`:${dir}`));
+    if (missingDirs.length > 0) {
+      env.PATH = `${missingDirs.join(':')}:${currentPath}`;
+    }
+
+    return env;
+  }
+
   async localExec(command: string): Promise<string> {
     return new Promise((resolve, reject) => {
       execCb(command, { shell: this.getShell(), env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
@@ -95,7 +136,7 @@ export class ExecutorService {
       const child = spawn(scriptPath, args, {
         cwd: workspace,
         shell: this.getShell(),
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        env: this.buildSpawnEnv(),
       });
 
       // Store process reference if taskId provided

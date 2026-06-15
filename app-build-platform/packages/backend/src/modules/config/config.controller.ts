@@ -150,8 +150,7 @@ export class ConfigController {
     const repoDir = `${workspaceDir}/repo`;
 
     try {
-      // Fetch first to pick up newly pushed branches
-      await this.executorService.localExec(`cd ${repoDir} && git fetch --all`);
+      // Only list already-fetched remote branches (git fetch is too slow for on-demand UI)
       const stdout = await this.executorService.localExec(
         `cd ${repoDir} && git branch -r`,
       );

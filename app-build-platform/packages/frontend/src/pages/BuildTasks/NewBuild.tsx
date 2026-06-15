@@ -99,13 +99,12 @@ const NewBuild: React.FC = () => {
 
   const fetchOptions = async () => {
     try {
-      const [optionsRes, branchesRes, publishingRes] = await Promise.all([
+      // 不加载 branches（git fetch 太慢），branches 在展开下拉框时按需加载
+      const [optionsRes, publishingRes] = await Promise.all([
         api.get('/config/option-groups'),
-        api.get('/config/branches'),
         api.get('/config/publishing'),
       ]);
       setOptionGroups(optionsRes.data);
-      setBranches(branchesRes.data);
       setPlatforms(publishingRes.data);
     } catch {
       message.error('获取配置选项失败');
