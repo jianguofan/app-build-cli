@@ -36,6 +36,7 @@ platform :ios do
       app_identifier: bundle_id,
       skip_metadata: true,
       skip_screenshots: true,
+      skip_app_version_update: true,
       force: true,
       run_precheck_before_submit: false,
       automatic_release: false,

@@ -20,7 +20,7 @@ interface BuildTask {
   id: string;
   platform: 'ios' | 'android';
   flavor: 'oversea' | 'cn';
-  env: 'dev' | 'pre' | 'prod';
+  env: 'dev' | 'staging' | 'pre' | 'prod';
   buildMode: 'debug' | 'release';
   branch: string;
   status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';

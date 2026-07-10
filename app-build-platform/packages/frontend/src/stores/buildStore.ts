@@ -4,7 +4,7 @@ interface BuildTask {
   id: string;
   platform: 'ios' | 'android';
   flavor: 'oversea' | 'cn';
-  env: 'dev' | 'pre' | 'prod';
+  env: 'dev' | 'staging' | 'pre' | 'prod';
   status: 'pending' | 'running' | 'success' | 'failed';
   createdAt: string;
   completedAt?: string;

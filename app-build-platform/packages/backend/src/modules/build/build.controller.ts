@@ -125,15 +125,17 @@ export class BuildController {
       throw new NotFoundException('No artifacts available');
     }
 
+    // Check file exists before attempting download to avoid ERR_HTTP_HEADERS_SENT
+    const fs = await import('fs');
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException(`Artifact file not found: ${filePath}`);
+    }
+
     const fileName = filePath.split('/').pop() || `${id}`;
     const ext = task.platform === 'ios' ? '.ipa' : '.apk';
     const downloadName = `${task.platform}-${task.flavor}-${task.buildMode}-${task.env}-${task.id.substring(0, 8)}${ext}`;
 
-    res.download(filePath, downloadName, (err) => {
-      if (err) {
-        res.status(HttpStatus.NOT_FOUND).json({ message: 'File not found' });
-      }
-    });
+    res.download(filePath, downloadName);
   }
 
   @Delete(':id')

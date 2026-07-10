@@ -104,22 +104,26 @@ export class PgyerPublisher extends BasePublisher {
           this.logger.error(`  Response data: ${JSON.stringify(error.response.data)}`);
         }
 
-        // 对于网络错误，尝试重试
-        const isNetworkError = errorCode === 'ECONNRESET' ||
-                              errorCode === 'ETIMEDOUT' ||
-                              errorCode === 'ECONNABORTED' ||
-                              errorMsg.includes('socket hang up') ||
-                              errorMsg.includes('timeout');
+        // 对于网络错误或临时服务器错误，尝试重试
+        const httpStatus = error.response?.status;
+        const isRetryable = errorCode === 'ECONNRESET' ||
+                           errorCode === 'ETIMEDOUT' ||
+                           errorCode === 'ECONNABORTED' ||
+                           errorMsg.includes('socket hang up') ||
+                           errorMsg.includes('timeout') ||
+                           httpStatus === 502 ||
+                           httpStatus === 503 ||
+                           httpStatus === 504;
 
-        if (isNetworkError && attempt < maxRetries) {
+        if (isRetryable && attempt < maxRetries) {
           const waitTime = attempt * 5000; // 递增等待时间：5s, 10s
-          this.logger.log(`Network error detected, waiting ${waitTime/1000}s before retry...`);
+          this.logger.log(`Retryable error detected (${errorCode || `HTTP ${httpStatus}`}), waiting ${waitTime/1000}s before retry...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           continue;
         }
 
         // 非网络错误或已达到最大重试次数，直接返回失败
-        if (!isNetworkError || attempt === maxRetries) {
+        if (!isRetryable || attempt === maxRetries) {
           break;
         }
       }

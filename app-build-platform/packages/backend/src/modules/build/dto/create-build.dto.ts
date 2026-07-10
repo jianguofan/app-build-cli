@@ -26,7 +26,7 @@ export class CreateBuildDto {
   @IsNotEmpty({ message: 'buildMode 不能为空' })
   buildMode: string;
 
-  @ApiProperty({ description: '环境', example: 'prod', enum: ['dev', 'pre', 'prod'] })
+  @ApiProperty({ description: '环境', example: 'prod', enum: ['dev', 'staging', 'pre', 'prod'] })
   @IsString()
   @IsNotEmpty({ message: 'env 不能为空' })
   env: string;

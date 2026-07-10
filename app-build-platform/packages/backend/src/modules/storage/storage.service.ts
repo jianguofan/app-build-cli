@@ -183,7 +183,8 @@ export class StorageService {
   private async initializeOptionDefaults(): Promise<void> {
     const count = await this.optionGroupRepo.count();
     if (count > 0) {
-      this.logger.log(`Option groups already initialized (${count} rows)`);
+      this.logger.log(`Option groups already initialized (${count} rows), running migration check...`);
+      await this.migrateOptionDefaults();
       return;
     }
 
@@ -212,6 +213,7 @@ export class StorageService {
         id: uuidv4(), key: 'env', label: '环境',
         values: [
           { value: 'dev', label: 'Development (开发)' },
+          { value: 'staging', label: 'Staging (预上线)' },
           { value: 'pre', label: 'Pre-production (预发布)' },
           { value: 'prod', label: 'Production (生产)' },
         ],
@@ -244,6 +246,39 @@ export class StorageService {
     const entities = defaults.map((g) => this.toOptionGroupEntity(g));
     await this.optionGroupRepo.save(entities);
     this.logger.log(`Initialized ${entities.length} default option groups`);
+  }
+
+  /**
+   * Migrate existing option groups to add new values that were introduced after initial seeding.
+   * Only appends missing values — never removes or modifies existing ones.
+   */
+  private async migrateOptionDefaults(): Promise<void> {
+    const migrations: Record<string, BuildOptionValue[]> = {
+      env: [
+        { value: 'staging', label: 'Staging (预上线)' },
+      ],
+    };
+
+    for (const [key, newValues] of Object.entries(migrations)) {
+      const group = await this.optionGroupRepo.findOneBy({ key });
+      if (!group) continue;
+
+      let updated = false;
+      const currentValues: BuildOptionValue[] = group.values || [];
+      for (const nv of newValues) {
+        if (!currentValues.some((v) => v.value === nv.value)) {
+          currentValues.push(nv);
+          this.logger.log(`Migrated: added "${nv.value}" to option group "${key}"`);
+          updated = true;
+        }
+      }
+
+      if (updated) {
+        group.values = currentValues;
+        group.updatedAt = new Date();
+        await this.optionGroupRepo.save(group);
+      }
+    }
   }
 
   async listOptionGroups(): Promise<BuildOptionGroup[]> {
