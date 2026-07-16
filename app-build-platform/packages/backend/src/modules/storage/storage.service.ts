@@ -116,7 +116,7 @@ export class StorageService {
       order: { createdAt: 'DESC' },
     });
 
-    if (entity && entity.artifacts && (entity.artifacts.ipa || entity.artifacts.apk)) {
+    if (entity && entity.artifacts && (entity.artifacts.ipa || entity.artifacts.apk || entity.artifacts.aab)) {
       return this.toBuildModel(entity);
     }
     return undefined;
@@ -210,6 +210,11 @@ export class StorageService {
         required: true, isStandard: true, createdAt: now, updatedAt: now,
       },
       {
+        id: uuidv4(), key: 'androidArtifact', label: 'Android 产物类型',
+        values: [{ value: 'apk', label: 'APK' }, { value: 'appbundle', label: 'AppBundle (AAB)' }],
+        required: false, isStandard: true, createdAt: now, updatedAt: now,
+      },
+      {
         id: uuidv4(), key: 'env', label: '环境',
         values: [
           { value: 'dev', label: 'Development (开发)' },
@@ -259,6 +264,14 @@ export class StorageService {
       ],
     };
 
+    const newGroups: BuildOptionGroup[] = [
+      {
+        id: uuidv4(), key: 'androidArtifact', label: 'Android 产物类型',
+        values: [{ value: 'apk', label: 'APK' }, { value: 'appbundle', label: 'AppBundle (AAB)' }],
+        required: false, isStandard: true, createdAt: new Date(), updatedAt: new Date(),
+      },
+    ];
+
     for (const [key, newValues] of Object.entries(migrations)) {
       const group = await this.optionGroupRepo.findOneBy({ key });
       if (!group) continue;
@@ -277,6 +290,14 @@ export class StorageService {
         group.values = currentValues;
         group.updatedAt = new Date();
         await this.optionGroupRepo.save(group);
+      }
+    }
+
+    for (const ng of newGroups) {
+      const existing = await this.optionGroupRepo.findOneBy({ key: ng.key });
+      if (!existing) {
+        await this.optionGroupRepo.save(this.toOptionGroupEntity(ng));
+        this.logger.log(`Migrated: added new option group "${ng.key}"`);
       }
     }
   }
@@ -466,6 +487,7 @@ export class StorageService {
     if (task.flavor !== undefined) entity.flavor = task.flavor;
     if (task.buildMode !== undefined) entity.buildMode = task.buildMode;
     if (task.env !== undefined) entity.env = task.env;
+    if (task.androidArtifact !== undefined) entity.androidArtifact = task.androidArtifact;
     if (task.branch !== undefined) entity.branch = task.branch;
     if (task.language !== undefined) entity.language = task.language;
     if (task.region !== undefined) entity.region = task.region;
@@ -492,6 +514,7 @@ export class StorageService {
       flavor: entity.flavor,
       buildMode: entity.buildMode,
       env: entity.env,
+      androidArtifact: entity.androidArtifact as 'apk' | 'appbundle' | undefined,
       branch: entity.branch,
       language: entity.language,
       region: entity.region,

@@ -35,6 +35,7 @@ interface BuildTask {
   flavor: string;
   env: string;
   buildMode: string;
+  androidArtifact?: 'apk' | 'appbundle';
   branch: string;
   status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
   createdAt: string;
@@ -44,6 +45,7 @@ interface BuildTask {
   artifacts?: {
     ipa?: string;
     apk?: string;
+    aab?: string;
   };
   error?: string;
   customParams?: Record<string, string>;
@@ -187,7 +189,7 @@ const BuildDetail: React.FC = () => {
     // Fetch successful builds with artifacts for selection
     try {
       const res = await api.get('/builds', { params: { status: 'success', limit: 50 } });
-      const builds = (res.data.data || []).filter((b: any) => b.artifacts && (b.artifacts.ipa || b.artifacts.apk));
+      const builds = (res.data.data || []).filter((b: any) => b.artifacts && (b.artifacts.ipa || b.artifacts.apk || b.artifacts.aab));
       setSuccessfulBuilds(builds);
       setSelectedBuildId(id || '');
     } catch {
@@ -418,7 +420,7 @@ const BuildDetail: React.FC = () => {
             )}
           </Descriptions>
 
-          {task.artifacts && (task.artifacts.ipa || task.artifacts.apk) && task.status !== 'cancelled' && (
+          {task.artifacts && (task.artifacts.ipa || task.artifacts.apk || task.artifacts.aab) && task.status !== 'cancelled' && (
             <>
               <Divider />
               <div>
@@ -440,6 +442,15 @@ const BuildDetail: React.FC = () => {
                       href={`/api/builds/${task.id}/download?token=${localStorage.getItem('token')}`}
                     >
                       下载 APK
+                    </Button>
+                  )}
+                  {task.artifacts.aab && (
+                    <Button
+                      icon={<DownloadOutlined />}
+                      type="primary"
+                      href={`/api/builds/${task.id}/download?token=${localStorage.getItem('token')}`}
+                    >
+                      下载 AAB
                     </Button>
                   )}
                   {task.platform === 'ios' && task.artifacts && (task.artifacts.ipa || task.artifacts.apk) && (

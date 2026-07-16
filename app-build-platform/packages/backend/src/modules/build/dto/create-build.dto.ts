@@ -31,6 +31,11 @@ export class CreateBuildDto {
   @IsNotEmpty({ message: 'env 不能为空' })
   env: string;
 
+  @ApiPropertyOptional({ description: 'Android 产物类型', example: 'apk', enum: ['apk', 'appbundle'] })
+  @IsString()
+  @IsOptional()
+  androidArtifact?: string;
+
   @ApiProperty({ description: 'Git 分支', example: 'main' })
   @IsString()
   @IsNotEmpty({ message: 'branch 不能为空' })

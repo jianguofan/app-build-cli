@@ -27,9 +27,28 @@ export class WorkspaceService {
   private dirExists = (p: string) => this.executorService.localDirectoryExists(p);
 
   /**
-   * Bump CFBundleVersion for iOS builds by updating pubspec.yaml's build number.
-   * Format: 13 + YY + MM + DD + NN (e.g. 1326051300 → prefix=13, 2026-05-13, build #00)
+   * Persistent build number counter file, stored outside the git repo
+   * to survive repo resets. Tracks the last used counter for each date prefix.
+   * Format: { "13260623": 3, "13260624": 1 }
    */
+  private get counterFile(): string {
+    return path.join(this.baseDir, '.build-counter.json');
+  }
+
+  private readCounter(): Record<string, number> {
+    try {
+      if (fs.existsSync(this.counterFile)) {
+        return JSON.parse(fs.readFileSync(this.counterFile, 'utf-8'));
+      }
+    } catch {
+      this.logger.warn('Failed to read build counter file, starting fresh');
+    }
+    return {};
+  }
+
+  private writeCounter(counters: Record<string, number>): void {
+    fs.writeFileSync(this.counterFile, JSON.stringify(counters, null, 2), 'utf-8');
+  }
   async bumpBuildNumber(workspace: string): Promise<string> {
     const pubspecPath = path.join(workspace, 'pubspec.yaml');
 
@@ -54,18 +73,35 @@ export class WorkspaceService {
     const dd = String(now.getDate()).padStart(2, '0');
     const datePrefix = `13${yy}${mm}${dd}`;
 
-    // If existing build number has the same date prefix, increment the counter;
-    // otherwise start from 00.
-    let counter = 0;
+    // Determine the starting counter from two sources:
+    //   a) The current pubspec.yaml build number (from git — may be stale after repo reset)
+    //   b) The persistent counter file (survives repo resets, tracks actually-used numbers)
+    let counterFromPubspec = -1;
     if (currentBuildNumber.startsWith(datePrefix)) {
-      const currentCounter = parseInt(currentBuildNumber.slice(-2), 10);
-      if (!isNaN(currentCounter)) {
-        counter = currentCounter + 1;
+      const parsed = parseInt(currentBuildNumber.slice(-2), 10);
+      if (!isNaN(parsed)) {
+        counterFromPubspec = parsed;
       }
     }
 
-    const nn = String(counter).padStart(2, '0');
+    const counters = this.readCounter();
+    const counterFromPersist = counters[datePrefix] ?? -1;
+
+    // Take the max of both sources and increment by 1
+    const counter = Math.max(counterFromPubspec, counterFromPersist) + 1;
+
+    // Pad to 2 digits; if we exceed 99 builds in a day, wrap with a warning
+    if (counter > 99) {
+      this.logger.warn(
+        `Build counter for ${datePrefix} exceeded 99 (${counter}). Consider a different versioning scheme.`,
+      );
+    }
+    const nn = String(counter % 100).padStart(2, '0');
     const newBuildNumber = `${datePrefix}${nn}`;
+
+    // Persist the counter so the next build (even after repo reset) won't reuse this number
+    counters[datePrefix] = counter;
+    this.writeCounter(counters);
 
     content = content.replace(versionRegex, `$1${newBuildNumber}`);
     fs.writeFileSync(pubspecPath, content, 'utf-8');
@@ -123,8 +159,8 @@ export class WorkspaceService {
   async collectArtifacts(
     workspace: string,
     task: BuildTask,
-  ): Promise<{ ipa?: string; apk?: string }> {
-    const artifacts: { ipa?: string; apk?: string } = {};
+  ): Promise<{ ipa?: string; apk?: string; aab?: string }> {
+    const artifacts: { ipa?: string; apk?: string; aab?: string } = {};
     const versionSuffix = this.getVersionSuffix(workspace);
 
     try {
@@ -139,14 +175,45 @@ export class WorkspaceService {
           this.logger.log(`Collected iOS artifact: ${destPath}`);
         }
       } else if (task.platform === 'android') {
-        const apkPath = `${workspace}/build/app/outputs/flutter-apk/app-${task.flavor}-${task.buildMode}.apk`;
-        if (await this.fileExists(apkPath)) {
-          const destName = `${task.flavor}-${task.buildMode}-${task.env}${versionSuffix}-${task.id.substring(0, 8)}.apk`;
-          const destPath = `${this.baseDir}/builds/android/${destName}`;
-          await this.exec(`mkdir -p ${this.baseDir}/builds/android`);
-          await this.exec(`cp ${apkPath} ${destPath}`);
-          artifacts.apk = destPath;
-          this.logger.log(`Collected Android artifact: ${destPath}`);
+        if (task.androidArtifact === 'appbundle') {
+          const aabPath = `${workspace}/build/app/outputs/bundle/${task.flavor}${task.buildMode === 'release' ? '' : task.buildMode}Release/app-${task.flavor}-${task.buildMode}.aab`;
+          // Also try the standard flavor path
+          const aabPaths = [
+            aabPath,
+            `${workspace}/build/app/outputs/bundle/${task.flavor}Release/app-${task.flavor}-release.aab`,
+            `${workspace}/build/app/outputs/bundle/release/app-release.aab`,
+          ];
+          for (const ap of aabPaths) {
+            if (await this.fileExists(ap)) {
+              const destName = `${task.flavor}-${task.buildMode}-${task.env}${versionSuffix}-${task.id.substring(0, 8)}.aab`;
+              const destPath = `${this.baseDir}/builds/android/${destName}`;
+              await this.exec(`mkdir -p ${this.baseDir}/builds/android`);
+              await this.exec(`cp ${ap} ${destPath}`);
+              artifacts.aab = destPath;
+              this.logger.log(`Collected Android AAB artifact: ${destPath}`);
+              break;
+            }
+          }
+          // Also look for APK as fallback (some build scripts produce both)
+          const apkPath = `${workspace}/build/app/outputs/flutter-apk/app-${task.flavor}-${task.buildMode}.apk`;
+          if (await this.fileExists(apkPath)) {
+            const destName = `${task.flavor}-${task.buildMode}-${task.env}${versionSuffix}-${task.id.substring(0, 8)}.apk`;
+            const destPath = `${this.baseDir}/builds/android/${destName}`;
+            await this.exec(`mkdir -p ${this.baseDir}/builds/android`);
+            await this.exec(`cp ${apkPath} ${destPath}`);
+            artifacts.apk = destPath;
+            this.logger.log(`Collected Android APK artifact (fallback): ${destPath}`);
+          }
+        } else {
+          const apkPath = `${workspace}/build/app/outputs/flutter-apk/app-${task.flavor}-${task.buildMode}.apk`;
+          if (await this.fileExists(apkPath)) {
+            const destName = `${task.flavor}-${task.buildMode}-${task.env}${versionSuffix}-${task.id.substring(0, 8)}.apk`;
+            const destPath = `${this.baseDir}/builds/android/${destName}`;
+            await this.exec(`mkdir -p ${this.baseDir}/builds/android`);
+            await this.exec(`cp ${apkPath} ${destPath}`);
+            artifacts.apk = destPath;
+            this.logger.log(`Collected Android artifact: ${destPath}`);
+          }
         }
       }
 

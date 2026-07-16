@@ -17,6 +17,9 @@ export class BuildTaskEntity {
   @Column()
   env: string;
 
+  @Column({ nullable: true, name: 'android_artifact' })
+  androidArtifact: string;
+
   @Column()
   branch: string;
 
@@ -45,7 +48,7 @@ export class BuildTaskEntity {
   status: string;
 
   @Column({ nullable: true, type: 'jsonb' })
-  artifacts: { ipa?: string; apk?: string };
+  artifacts: { ipa?: string; apk?: string; aab?: string };
 
   @Column({ nullable: true, name: 'log_file' })
   logFile: string;

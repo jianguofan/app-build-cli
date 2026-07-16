@@ -4,6 +4,7 @@ export interface BuildTask {
   flavor: string;
   buildMode: string;
   env: string;
+  androidArtifact?: 'apk' | 'appbundle';
   branch: string;
   language?: string;
   region?: string;
@@ -21,6 +22,7 @@ export interface BuildTask {
   artifacts?: {
     ipa?: string;
     apk?: string;
+    aab?: string;
   };
   error?: string;
 }

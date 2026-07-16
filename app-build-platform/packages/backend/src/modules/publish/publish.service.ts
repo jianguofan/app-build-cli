@@ -36,7 +36,7 @@ export class PublishService {
 
   async publish(
     buildId: string,
-    artifacts: { ipa?: string; apk?: string },
+    artifacts: { ipa?: string; apk?: string; aab?: string },
     pgyerAccountType?: string,
   ): Promise<void> {
     this.logger.log(`Starting publish for build: ${buildId}`);
@@ -52,7 +52,7 @@ export class PublishService {
       return;
     }
 
-    const artifactPath = build.platform === 'ios' ? artifacts.ipa : artifacts.apk;
+    const artifactPath = build.platform === 'ios' ? artifacts.ipa : (artifacts.aab || artifacts.apk);
     if (!artifactPath) {
       this.logger.warn(`No artifact found for build ${buildId}`);
       return;
@@ -210,11 +210,11 @@ export class PublishService {
       throw new NotFoundException(`Build ${buildId} not found`);
     }
 
-    if (!build.artifacts || (!build.artifacts.ipa && !build.artifacts.apk)) {
+    if (!build.artifacts || (!build.artifacts.ipa && !build.artifacts.apk && !build.artifacts.aab)) {
       throw new Error(`Build ${buildId} has no artifacts, cannot republish`);
     }
 
-    const artifactPath = build.platform === 'ios' ? build.artifacts.ipa : build.artifacts.apk;
+    const artifactPath = build.platform === 'ios' ? build.artifacts.ipa : (build.artifacts.aab || build.artifacts.apk);
     if (!artifactPath) {
       throw new Error(`No artifact found for build ${buildId}`);
     }
@@ -245,11 +245,11 @@ export class PublishService {
       throw new NotFoundException(`Build ${buildId} not found`);
     }
 
-    if (!build.artifacts || (!build.artifacts.ipa && !build.artifacts.apk)) {
+    if (!build.artifacts || (!build.artifacts.ipa && !build.artifacts.apk && !build.artifacts.aab)) {
       throw new Error(`Build ${buildId} has no artifacts, cannot upload`);
     }
 
-    const artifactPath = build.platform === 'ios' ? build.artifacts.ipa : build.artifacts.apk;
+    const artifactPath = build.platform === 'ios' ? build.artifacts.ipa : (build.artifacts.aab || build.artifacts.apk);
     if (!artifactPath) {
       throw new Error(`No artifact found for build ${buildId}`);
     }
@@ -281,7 +281,7 @@ export class PublishService {
       throw new NotFoundException(`Build ${record.buildId} not found for publish record`);
     }
 
-    const artifactPath = build.platform === 'ios' ? build.artifacts?.ipa : build.artifacts?.apk;
+    const artifactPath = build.platform === 'ios' ? build.artifacts?.ipa : (build.artifacts?.aab || build.artifacts?.apk);
     if (!artifactPath) {
       throw new Error(`Build ${record.buildId} has no artifacts, cannot retry`);
     }

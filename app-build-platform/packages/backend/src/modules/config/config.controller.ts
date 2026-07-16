@@ -146,20 +146,38 @@ export class ConfigController {
   @ApiOperation({ summary: '获取 Git 分支列表', description: '从配置的 Git 仓库获取所有远程分支' })
   @ApiResponse({ status: 200, description: '返回分支名称数组' })
   async getBranches() {
+    const repoUrl = this.configService.get<string>('GIT_REPO_URL') || '';
     const workspaceDir = this.configService.get<string>('WORKSPACE_DIR') || '';
     const repoDir = `${workspaceDir}/repo`;
 
     try {
-      // Only list already-fetched remote branches (git fetch is too slow for on-demand UI)
-      const stdout = await this.executorService.localExec(
-        `cd ${repoDir} && git branch -r`,
-      );
+      // Use git ls-remote to query remote branches directly — no local fetch needed.
+      // This is fast (only ref listing, no object transfer) and always up-to-date.
+      // Prefer running from within an existing clone (uses configured credentials),
+      // fall back to querying the remote URL directly when the clone doesn't exist yet.
+      let stdout: string;
+      try {
+        stdout = await this.executorService.localExec(
+          `cd ${repoDir} && git ls-remote --heads origin`,
+        );
+      } catch {
+        // Repo not cloned yet — query remote URL directly
+        if (!repoUrl) return [];
+        stdout = await this.executorService.localExec(
+          `git ls-remote --heads ${repoUrl}`,
+        );
+      }
 
       const branches = stdout
         .split('\n')
         .map((line: string) => line.trim())
-        .filter((line: string) => line && !line.includes('->'))
-        .map((line: string) => line.replace(/^origin\//, ''))
+        .filter((line: string) => line)
+        .map((line: string) => {
+          // git ls-remote output format: "<commit-hash>\trefs/heads/<branch-name>"
+          const match = line.match(/^[0-9a-f]+\trefs\/heads\/(.+)$/);
+          return match ? match[1] : null;
+        })
+        .filter((v: string | null): v is string => v !== null)
         .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
 
       return branches;

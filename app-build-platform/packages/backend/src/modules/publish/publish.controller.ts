@@ -94,10 +94,10 @@ export class PublishController {
       }),
       fileFilter: (req, file, cb) => {
         const ext = path.extname(file.originalname).toLowerCase();
-        if (ext === '.ipa' || ext === '.apk') {
+        if (ext === '.ipa' || ext === '.apk' || ext === '.aab') {
           cb(null, true);
         } else {
-          cb(new Error('只支持 .ipa 或 .apk 文件'), false);
+          cb(new Error('只支持 .ipa、.apk 或 .aab 文件'), false);
         }
       },
       limits: {

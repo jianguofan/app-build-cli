@@ -70,7 +70,7 @@ export class BuildProcessor {
         });
 
         if (cachedBuild && cachedBuild.artifacts) {
-          const artifactPath = cachedBuild.artifacts.ipa || cachedBuild.artifacts.apk;
+          const artifactPath = cachedBuild.artifacts.ipa || cachedBuild.artifacts.aab || cachedBuild.artifacts.apk;
           if (artifactPath && await this.executorService.localFileExists(artifactPath)) {
             logLine(`Cache hit! Matching build ${cachedBuild.id} exists, skipping build`);
 
@@ -101,10 +101,10 @@ export class BuildProcessor {
 
       // 3. 执行构建脚本
       logLine('Executing build script...');
-      logLine(`Platform: ${task.platform}, Flavor: ${task.flavor}, Env: ${task.env}`);
+      logLine(`Platform: ${task.platform}, Flavor: ${task.flavor}, Env: ${task.env}${task.androidArtifact ? `, Artifact: ${task.androidArtifact}` : ''}`);
 
-      // Map platform to build_app.sh format: ios→ipa, android→apk
-      const scriptPlatform = task.platform === 'ios' ? 'ipa' : 'apk';
+      // Map platform to build_app.sh format: ios→ipa, android→apk or appbundle
+      const scriptPlatform = task.platform === 'ios' ? 'ipa' : (task.androidArtifact || 'apk');
 
       const customArgs = task.customParams
         ? Object.entries(task.customParams).map(([k, v]) => `--${k}=${v}`)
@@ -130,7 +130,7 @@ export class BuildProcessor {
       logLine('Collecting build artifacts...');
       const artifacts = await this.workspaceService.collectArtifacts(workspace, task);
 
-      if (artifacts.ipa || artifacts.apk) {
+      if (artifacts.ipa || artifacts.apk || artifacts.aab) {
         logLine(`Artifacts collected: ${JSON.stringify(artifacts)}`);
       } else {
         logLine('Warning: No artifacts found');

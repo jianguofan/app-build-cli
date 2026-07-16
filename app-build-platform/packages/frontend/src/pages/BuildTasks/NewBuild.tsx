@@ -51,7 +51,7 @@ interface PlatformConfig {
   fields: PlatformField[];
 }
 
-const STANDARD_KEYS = ['platform', 'flavor', 'buildMode', 'env', 'language', 'region', 'pgyerAccountType'];
+const STANDARD_KEYS = ['platform', 'flavor', 'buildMode', 'androidArtifact', 'env', 'language', 'region', 'pgyerAccountType'];
 
 const REGION_LANG_MAP: Record<string, string> = {
   CN: 'zh',
@@ -268,6 +268,20 @@ const NewBuild: React.FC = () => {
               return g ? (
                 <Form.Item label={g.label} name="buildMode" rules={[{ required: true, message: `请选择${g.label}` }]}>
                   <Select placeholder={`选择${g.label}`} size="large">
+                    {g.values.map((v) => (
+                      <Option key={v.value} value={v.value}>{v.label}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              ) : null;
+            })()}
+
+            {/* Android Artifact — only show when platform is android */}
+            {selectedPlatform === 'android' && (() => {
+              const g = getGroup('androidArtifact');
+              return g ? (
+                <Form.Item label={g.label} name="androidArtifact">
+                  <Select placeholder={`选择${g.label}`} size="large" allowClear>
                     {g.values.map((v) => (
                       <Option key={v.value} value={v.value}>{v.label}</Option>
                     ))}

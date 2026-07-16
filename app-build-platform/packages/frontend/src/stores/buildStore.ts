@@ -5,6 +5,7 @@ interface BuildTask {
   platform: 'ios' | 'android';
   flavor: 'oversea' | 'cn';
   env: 'dev' | 'staging' | 'pre' | 'prod';
+  androidArtifact?: 'apk' | 'appbundle';
   status: 'pending' | 'running' | 'success' | 'failed';
   createdAt: string;
   completedAt?: string;

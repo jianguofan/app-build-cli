@@ -81,27 +81,77 @@ export class FastlanePublisher extends BasePublisher {
   }
 
   private resolveFastlaneDir(configService: ConfigService): string {
+    const triedPaths: string[] = [];
+
     // 1. Explicit FASTLANE_DIR env var takes priority
     const configured = configService.get<string>('FASTLANE_DIR');
-    if (configured && fs.existsSync(configured)) {
-      return configured;
+    if (configured) {
+      triedPaths.push(configured);
+      if (fs.existsSync(configured)) {
+        this.logger.log(`Using FASTLANE_DIR: ${configured}`);
+        return configured;
+      }
     }
 
     // 2. Workspace fastlane directory (for production setups)
     const workspaceDir = configService.get<string>('WORKSPACE_DIR') || '';
-    const workspaceFastlane = `${workspaceDir}/fastlane`;
-    if (fs.existsSync(workspaceFastlane)) {
-      return workspaceFastlane;
+    if (workspaceDir) {
+      const workspaceFastlane = path.join(workspaceDir, 'fastlane');
+      triedPaths.push(workspaceFastlane);
+      if (fs.existsSync(workspaceFastlane)) {
+        this.logger.log(`Using workspace fastlane: ${workspaceFastlane}`);
+        return workspaceFastlane;
+      }
     }
 
     // 3. Project-bundled fastlane directory (for dev / monorepo setups)
     const projectFastlane = path.join(process.cwd(), 'fastlane');
+    triedPaths.push(projectFastlane);
     if (fs.existsSync(projectFastlane)) {
+      this.logger.log(`Using project fastlane: ${projectFastlane}`);
       return projectFastlane;
     }
 
-    // 4. Default to workspace path (will error with clear message at upload time)
-    return workspaceFastlane;
+    // 4. Monorepo fastlane (app-build-platform/fastlane relative to cwd)
+    const monorepoFastlane = path.join(process.cwd(), 'app-build-platform', 'fastlane');
+    triedPaths.push(monorepoFastlane);
+    if (fs.existsSync(monorepoFastlane)) {
+      this.logger.log(`Using monorepo fastlane: ${monorepoFastlane}`);
+      return monorepoFastlane;
+    }
+
+    // 5. No fastlane directory found — throw with actionable message
+    const uniquePaths = [...new Set(triedPaths)];
+    throw new Error(
+      `Fastlane directory not found. Checked paths:\n${uniquePaths.map((p) => `  - ${p}`).join('\n')}\n` +
+        `Set FASTLANE_DIR env var to point to your fastlane directory, ` +
+        `or create a fastlane/ directory in your workspace at ${workspaceDir || '<WORKSPACE_DIR>'}/fastlane.`,
+    );
+  }
+
+  /**
+   * Resolve the Ruby bin directory, preferring Homebrew-installed Ruby
+   * over the ancient system Ruby shipped with macOS.
+   */
+  private resolveRubyBinPath(): string {
+    const candidates = [
+      '/opt/homebrew/opt/ruby/bin',       // Apple Silicon Homebrew
+      '/usr/local/opt/ruby/bin',          // Intel Homebrew
+      '/opt/homebrew/bin',                // Homebrew default (Apple Silicon)
+      '/usr/local/bin',                   // Homebrew default (Intel)
+    ];
+
+    for (const candidate of candidates) {
+      const rubyPath = path.join(candidate, 'ruby');
+      if (fs.existsSync(rubyPath)) {
+        this.logger.log(`Resolved Ruby bin path: ${candidate}`);
+        return candidate;
+      }
+    }
+
+    // Fallback: return empty string and let PATH resolve naturally
+    this.logger.warn('No Homebrew Ruby found, using system Ruby from PATH');
+    return '';
   }
 
   async upload(artifactPath: string, config: any): Promise<PublishResult> {
@@ -238,11 +288,21 @@ export class FastlanePublisher extends BasePublisher {
   ): Promise<{ success: boolean; error?: string }> {
     return new Promise((resolve) => {
       const { exec } = require('child_process');
+
+      // Ensure Homebrew Ruby is used instead of the system Ruby (macOS ships Ruby 2.6, too old)
+      const rubyBinPath = this.resolveRubyBinPath();
+      const env = {
+        ...process.env,
+        ...additionalEnv,
+        LC_ALL: 'en_US.UTF-8',
+        PATH: `${rubyBinPath}:${process.env.PATH || ''}`,
+      };
+
       exec(
         command,
         {
           timeout: 30 * 60 * 1000, // 30 minutes
-          env: { ...process.env, ...additionalEnv, LC_ALL: 'en_US.UTF-8' },
+          env,
         },
         (error: any, stdout: string, stderr: string) => {
           if (error) {

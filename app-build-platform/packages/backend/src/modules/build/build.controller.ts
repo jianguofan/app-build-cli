@@ -120,7 +120,7 @@ export class BuildController {
       throw new NotFoundException('No artifacts available');
     }
 
-    const filePath = artifacts.ipa || artifacts.apk;
+    const filePath = artifacts.ipa || artifacts.aab || artifacts.apk;
     if (!filePath) {
       throw new NotFoundException('No artifacts available');
     }
@@ -132,7 +132,7 @@ export class BuildController {
     }
 
     const fileName = filePath.split('/').pop() || `${id}`;
-    const ext = task.platform === 'ios' ? '.ipa' : '.apk';
+    const ext = task.platform === 'ios' ? '.ipa' : (artifacts.aab ? '.aab' : '.apk');
     const downloadName = `${task.platform}-${task.flavor}-${task.buildMode}-${task.env}-${task.id.substring(0, 8)}${ext}`;
 
     res.download(filePath, downloadName);

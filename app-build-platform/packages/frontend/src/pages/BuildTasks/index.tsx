@@ -21,6 +21,7 @@ interface BuildTask {
   platform: 'ios' | 'android';
   flavor: 'oversea' | 'cn';
   env: 'dev' | 'staging' | 'pre' | 'prod';
+  androidArtifact?: 'apk' | 'appbundle';
   buildMode: 'debug' | 'release';
   branch: string;
   status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';

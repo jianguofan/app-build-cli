@@ -33,6 +33,7 @@ interface BuildTask {
   platform: 'ios' | 'android';
   flavor: 'oversea' | 'cn';
   env: 'dev' | 'staging' | 'pre' | 'prod';
+  androidArtifact?: 'apk' | 'appbundle';
   buildMode: string;
   status: 'pending' | 'running' | 'success' | 'failed';
   createdAt: string;
